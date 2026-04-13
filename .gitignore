@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+
+# Built distributions (rebuild with build-portable.ps1)
+dist/
+
+# Runtime data (machine-specific settings & history)
+data/
+
+# Claude Code local settings
+.claude/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+rasterize-svg.mjs
+public/icon-src.svg

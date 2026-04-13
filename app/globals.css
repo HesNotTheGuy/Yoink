@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@keyframes shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%) scaleX(0.5); }
+  50%  { transform: translateX(60%)   scaleX(1.2); }
+  100% { transform: translateX(250%)  scaleX(0.5); }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(1.5rem); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.toast-enter {
+  animation: toast-in 0.2s ease-out forwards;
+}
