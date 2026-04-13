@@ -2,7 +2,7 @@
 
 A clean, local GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Runs as a local web app — no accounts, no cloud, just downloads.
 
-![Yoink screenshot](docs/screenshot.png)
+![Main UI](docs/screenshots/01-main.png)
 
 ---
 
@@ -19,6 +19,14 @@ A clean, local GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Runs as a loc
 - **yt-dlp updater** — update yt-dlp from within the UI with a progress indicator
 - **Themes** — Blue, Earthy, Cyberpunk, yt-dlp
 - **Portable build** — ships as a self-contained Windows executable
+
+| Downloading | History | Settings |
+|---|---|---|
+| ![Downloading](docs/screenshots/02-downloading.png) | ![History](docs/screenshots/03-history.png) | ![Settings](docs/screenshots/04-settings.png) |
+
+| Cyberpunk theme | Earthy theme |
+|---|---|
+| ![Cyberpunk](docs/screenshots/05-cyberpunk-theme.png) | ![Earthy](docs/screenshots/06-earthy-theme.png) |
 
 ---
 
