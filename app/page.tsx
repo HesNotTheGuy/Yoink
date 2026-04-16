@@ -6,7 +6,7 @@ const GUI_VERSION = "2.0.0";
 
 type Mode = "video" | "audio";
 type DownloadStatus = "idle" | "pending" | "downloading" | "done" | "error";
-type Theme = "blue" | "earthy" | "cyberpunk" | "ytdlp" | "terminal" | "glass" | "minimal" | "neon" | "brutalist";
+type Theme = "slate" | "terminal" | "glass" | "minimal" | "neon" | "brutalist";
 
 interface Toast {
   id: string;
@@ -64,10 +64,7 @@ const DEFAULT_SETTINGS: Settings = {
 const VIDEO_QUALITIES = ["best", "1080p", "720p", "480p", "360p"];
 
 const THEMES: { value: Theme; label: string; accent: string }[] = [
-  { value: "blue",     label: "Blue",      accent: "#3b82f6" },
-  { value: "earthy",   label: "Earthy",    accent: "#d97706" },
-  { value: "cyberpunk",label: "Cyberpunk", accent: "#06b6d4" },
-  { value: "ytdlp",   label: "yt-dlp",    accent: "#ef4444" },
+  { value: "slate",    label: "Slate",     accent: "#818cf8" },
   { value: "terminal", label: "Terminal",  accent: "#22c55e" },
   { value: "glass",    label: "Glass",     accent: "#a78bfa" },
   { value: "minimal",  label: "Minimal",   accent: "#e5e5e5" },
@@ -76,58 +73,21 @@ const THEMES: { value: Theme; label: string; accent: string }[] = [
 ];
 
 const THEME_CSS: Record<Theme, string> = {
-  blue: `
-    :root { --accent: #3b82f6; }
-  `,
-  earthy: `
+  slate: `
     :root {
-      --accent: #d97706;
-      --color-zinc-950: #1a0e08;
-      --color-zinc-900: #231408;
-      --color-zinc-800: #362010;
-      --color-zinc-700: #4d2f14;
-      --color-zinc-600: #664018;
-      --color-zinc-500: #8c5a28;
-      --color-zinc-400: #b07840;
-      --color-zinc-300: #c89668;
-      --color-blue-700: #92400e;
-      --color-blue-600: #b45309;
-      --color-blue-500: #d97706;
-      --color-blue-400: #f59e0b;
-    }
-  `,
-  cyberpunk: `
-    :root {
-      --accent: #06b6d4;
-      --color-zinc-950: #020512;
-      --color-zinc-900: #030820;
-      --color-zinc-800: #060d35;
-      --color-zinc-700: #091545;
-      --color-zinc-600: #0f2060;
-      --color-zinc-500: #204080;
-      --color-zinc-400: #4870b0;
-      --color-zinc-300: #7090c8;
-      --color-blue-700: #0e7490;
-      --color-blue-600: #0891b2;
-      --color-blue-500: #06b6d4;
-      --color-blue-400: #22d3ee;
-    }
-  `,
-  ytdlp: `
-    :root {
-      --accent: #ef4444;
-      --color-zinc-950: #0d0505;
-      --color-zinc-900: #160808;
-      --color-zinc-800: #200b0b;
-      --color-zinc-700: #2c0e0e;
-      --color-zinc-600: #401212;
-      --color-zinc-500: #704040;
-      --color-zinc-400: #9a6060;
-      --color-zinc-300: #c08888;
-      --color-blue-700: #991b1b;
-      --color-blue-600: #dc2626;
-      --color-blue-500: #ef4444;
-      --color-blue-400: #f87171;
+      --accent: #818cf8;
+      --color-zinc-950: #070b14;
+      --color-zinc-900: #0d1424;
+      --color-zinc-800: #141e35;
+      --color-zinc-700: #1e2d4a;
+      --color-zinc-600: #2d4166;
+      --color-zinc-500: #4a6180;
+      --color-zinc-400: #7a9ab8;
+      --color-zinc-300: #a8c0d8;
+      --color-blue-700: #3730a3;
+      --color-blue-600: #4f46e5;
+      --color-blue-500: #6366f1;
+      --color-blue-400: #818cf8;
     }
   `,
   terminal: `
@@ -345,7 +305,7 @@ export default function Home() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Theme (client-only, localStorage)
-  const [theme, setTheme] = useState<Theme>("blue");
+  const [theme, setTheme] = useState<Theme>("slate");
 
   // Update
   const [updating, setUpdating] = useState(false);
@@ -374,7 +334,7 @@ export default function Home() {
   // ── Load theme from localStorage on mount ───────────────────────────────
   useEffect(() => {
     const saved = localStorage.getItem("theme") as Theme | null;
-    if (saved && (["blue", "earthy", "cyberpunk", "ytdlp"] as Theme[]).includes(saved)) {
+    if (saved && (["slate", "terminal", "glass", "minimal", "neon", "brutalist"] as Theme[]).includes(saved)) {
       setTheme(saved);
     }
   }, []);
@@ -1206,7 +1166,7 @@ export default function Home() {
               {/* Color theme picker */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-zinc-400 uppercase tracking-widest">Color Theme</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {THEMES.map((t) => (
                     <button
                       key={t.value}

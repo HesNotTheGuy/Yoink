@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --accent: #3b82f6;
+  --accent: #818cf8;
 }
 
 @keyframes shimmer {
