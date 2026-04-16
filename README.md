@@ -24,6 +24,10 @@ A clean, local GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Runs as a loc
 |---|---|---|
 | ![Downloading](docs/screenshots/02-downloading.png) | ![History](docs/screenshots/03-history.png) | ![Settings](docs/screenshots/04-settings.png) |
 
+| Terminal | Glass | Neon Noir |
+|---|---|---|
+| ![Terminal](docs/screenshots/05-terminal-theme.png) | ![Glass](docs/screenshots/06-glass-theme.png) | ![Neon Noir](docs/screenshots/07-neon-theme.png) |
+
 ### Themes
 
 | Slate | Terminal | Glass |
