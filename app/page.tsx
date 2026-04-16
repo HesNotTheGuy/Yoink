@@ -6,7 +6,7 @@ const GUI_VERSION = "2.0.0";
 
 type Mode = "video" | "audio";
 type DownloadStatus = "idle" | "pending" | "downloading" | "done" | "error";
-type Theme = "blue" | "earthy" | "cyberpunk" | "ytdlp";
+type Theme = "blue" | "earthy" | "cyberpunk" | "ytdlp" | "terminal" | "glass" | "minimal" | "neon" | "brutalist";
 
 interface Toast {
   id: string;
@@ -64,16 +64,24 @@ const DEFAULT_SETTINGS: Settings = {
 const VIDEO_QUALITIES = ["best", "1080p", "720p", "480p", "360p"];
 
 const THEMES: { value: Theme; label: string; accent: string }[] = [
-  { value: "blue",     label: "Blue",     accent: "#3b82f6" },
-  { value: "earthy",   label: "Earthy",   accent: "#d97706" },
-  { value: "cyberpunk",label: "Cyberpunk",accent: "#06b6d4" },
-  { value: "ytdlp",   label: "yt-dlp",   accent: "#ef4444" },
+  { value: "blue",     label: "Blue",      accent: "#3b82f6" },
+  { value: "earthy",   label: "Earthy",    accent: "#d97706" },
+  { value: "cyberpunk",label: "Cyberpunk", accent: "#06b6d4" },
+  { value: "ytdlp",   label: "yt-dlp",    accent: "#ef4444" },
+  { value: "terminal", label: "Terminal",  accent: "#22c55e" },
+  { value: "glass",    label: "Glass",     accent: "#a78bfa" },
+  { value: "minimal",  label: "Minimal",   accent: "#e5e5e5" },
+  { value: "neon",     label: "Neon Noir", accent: "#f472b6" },
+  { value: "brutalist",label: "Brutalist", accent: "#ffffff" },
 ];
 
 const THEME_CSS: Record<Theme, string> = {
-  blue: "",
+  blue: `
+    :root { --accent: #3b82f6; }
+  `,
   earthy: `
     :root {
+      --accent: #d97706;
       --color-zinc-950: #1a0e08;
       --color-zinc-900: #231408;
       --color-zinc-800: #362010;
@@ -90,6 +98,7 @@ const THEME_CSS: Record<Theme, string> = {
   `,
   cyberpunk: `
     :root {
+      --accent: #06b6d4;
       --color-zinc-950: #020512;
       --color-zinc-900: #030820;
       --color-zinc-800: #060d35;
@@ -106,6 +115,7 @@ const THEME_CSS: Record<Theme, string> = {
   `,
   ytdlp: `
     :root {
+      --accent: #ef4444;
       --color-zinc-950: #0d0505;
       --color-zinc-900: #160808;
       --color-zinc-800: #200b0b;
@@ -118,6 +128,172 @@ const THEME_CSS: Record<Theme, string> = {
       --color-blue-600: #dc2626;
       --color-blue-500: #ef4444;
       --color-blue-400: #f87171;
+    }
+  `,
+  terminal: `
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+    :root {
+      --accent: #22c55e;
+      --color-zinc-950: #010c01;
+      --color-zinc-900: #021502;
+      --color-zinc-800: #042004;
+      --color-zinc-700: #063006;
+      --color-zinc-600: #0a420a;
+      --color-zinc-500: #166016;
+      --color-zinc-400: #4ade80;
+      --color-zinc-300: #86efac;
+      --color-blue-700: #15803d;
+      --color-blue-600: #16a34a;
+      --color-blue-500: #22c55e;
+      --color-blue-400: #4ade80;
+    }
+    *, *::before, *::after {
+      font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 65, 0.015) 2px,
+        rgba(0, 255, 65, 0.015) 4px
+      );
+      pointer-events: none;
+      z-index: 9998;
+    }
+    .bg-blue-600, .bg-blue-500 {
+      box-shadow: 0 0 14px rgba(34,197,94,0.45) !important;
+    }
+    input:focus, select:focus, textarea:focus {
+      box-shadow: 0 0 0 1px #22c55e, 0 0 8px rgba(34,197,94,0.3) !important;
+    }
+  `,
+  glass: `
+    :root {
+      --accent: #a78bfa;
+      --color-zinc-950: #04020f;
+      --color-zinc-900: #080518;
+      --color-zinc-800: #100c28;
+      --color-zinc-700: #1c1640;
+      --color-zinc-600: #2e2560;
+      --color-zinc-500: #5048a0;
+      --color-zinc-400: #7c6fc8;
+      --color-zinc-300: #b0a8e8;
+      --color-blue-700: #4c1d95;
+      --color-blue-600: #6d28d9;
+      --color-blue-500: #7c3aed;
+      --color-blue-400: #a78bfa;
+    }
+    body {
+      background: radial-gradient(ellipse at 30% 20%, #1a0533 0%, #04020f 50%, #020818 100%) fixed !important;
+    }
+    .rounded-xl, .rounded-lg {
+      backdrop-filter: blur(18px) saturate(160%) !important;
+      -webkit-backdrop-filter: blur(18px) saturate(160%) !important;
+      background-color: rgb(12 8 30 / 0.45) !important;
+      border-color: rgb(255 255 255 / 0.07) !important;
+    }
+    .bg-blue-600, .bg-blue-500 {
+      box-shadow: 0 0 20px rgba(124,58,237,0.5), 0 0 60px rgba(124,58,237,0.15) !important;
+    }
+    input:focus, select:focus {
+      border-color: #7c3aed !important;
+      box-shadow: 0 0 0 1px #7c3aed, 0 0 12px rgba(124,58,237,0.25) !important;
+    }
+  `,
+  minimal: `
+    :root {
+      --accent: #e5e5e5;
+      --color-zinc-950: #080808;
+      --color-zinc-900: #101010;
+      --color-zinc-800: #1a1a1a;
+      --color-zinc-700: #242424;
+      --color-zinc-600: #3a3a3a;
+      --color-zinc-500: #666666;
+      --color-zinc-400: #999999;
+      --color-zinc-300: #cccccc;
+      --color-blue-700: #333333;
+      --color-blue-600: #555555;
+      --color-blue-500: #e5e5e5;
+      --color-blue-400: #f5f5f5;
+    }
+    .rounded-xl, .rounded-lg { border-radius: 4px !important; }
+    .rounded-md, .rounded-lg { border-radius: 3px !important; }
+    .text-2xl { font-size: 1.1rem !important; font-weight: 300 !important; letter-spacing: 0.2em !important; text-transform: uppercase !important; }
+    h1 { letter-spacing: 0.15em !important; font-weight: 300 !important; }
+    label, .uppercase { letter-spacing: 0.18em !important; }
+    .bg-blue-600, .bg-blue-500 {
+      background-color: #e5e5e5 !important;
+      color: #080808 !important;
+    }
+    .text-white { color: #e8e8e8 !important; }
+  `,
+  neon: `
+    :root {
+      --accent: #f472b6;
+      --color-zinc-950: #05010d;
+      --color-zinc-900: #0a0118;
+      --color-zinc-800: #130225;
+      --color-zinc-700: #1e0336;
+      --color-zinc-600: #2e054f;
+      --color-zinc-500: #6b1d8a;
+      --color-zinc-400: #c026d3;
+      --color-zinc-300: #e879f9;
+      --color-blue-700: #9d174d;
+      --color-blue-600: #be185d;
+      --color-blue-500: #ec4899;
+      --color-blue-400: #f472b6;
+    }
+    body {
+      background: radial-gradient(ellipse at 70% 80%, #1a0028 0%, #05010d 60%) fixed !important;
+    }
+    .bg-blue-600, .bg-blue-500 {
+      box-shadow: 0 0 18px rgba(236,72,153,0.55), 0 0 50px rgba(236,72,153,0.2) !important;
+    }
+    input:focus, select:focus {
+      border-color: #ec4899 !important;
+      box-shadow: 0 0 0 1px #ec4899, 0 0 14px rgba(236,72,153,0.3) !important;
+    }
+    .border-zinc-800, .border-zinc-700 {
+      border-color: rgb(236 72 153 / 0.2) !important;
+    }
+    h1 { color: #f0abfc !important; }
+  `,
+  brutalist: `
+    :root {
+      --accent: #ffffff;
+      --color-zinc-950: #000000;
+      --color-zinc-900: #0d0d0d;
+      --color-zinc-800: #1a1a1a;
+      --color-zinc-700: #2e2e2e;
+      --color-zinc-600: #555555;
+      --color-zinc-500: #888888;
+      --color-zinc-400: #bbbbbb;
+      --color-zinc-300: #dddddd;
+      --color-blue-700: #1a1a1a;
+      --color-blue-600: #ffffff;
+      --color-blue-500: #ffffff;
+      --color-blue-400: #ffffff;
+    }
+    *, *::before, *::after { border-radius: 0 !important; }
+    .rounded-xl, .rounded-lg, .rounded-md, .rounded-full { border-radius: 0 !important; }
+    .border, .border-zinc-800, .border-zinc-700 {
+      border-width: 2px !important;
+      border-color: #ffffff !important;
+    }
+    .bg-blue-600, .bg-blue-500 {
+      background-color: #ffffff !important;
+      color: #000000 !important;
+      font-weight: 700 !important;
+    }
+    .text-2xl { font-weight: 900 !important; letter-spacing: -0.02em !important; font-size: 1.6rem !important; }
+    button:not(.bg-blue-600):not(.bg-blue-500) {
+      border: 2px solid #555555 !important;
+    }
+    button:hover:not(.bg-blue-600):not(.bg-blue-500) {
+      border-color: #ffffff !important;
     }
   `,
 };
@@ -1030,18 +1206,18 @@ export default function Home() {
               {/* Color theme picker */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-zinc-400 uppercase tracking-widest">Color Theme</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {THEMES.map((t) => (
                     <button
                       key={t.value}
                       onClick={() => applyTheme(t.value)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${
+                      className={`flex items-center gap-2 px-2 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${
                         theme === t.value
                           ? "border-blue-500 bg-blue-500/10 text-white"
                           : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
                       }`}
                     >
-                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.accent }} />
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.accent }} />
                       {t.label}
                     </button>
                   ))}
