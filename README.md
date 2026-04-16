@@ -17,7 +17,7 @@ A clean, local GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Runs as a loc
 - **Cookies support** — pass a cookies file for age-gated or private content
 - **Speed limiter** — cap download speed
 - **yt-dlp updater** — update yt-dlp from within the UI with a progress indicator
-- **Themes** — 9 themes: Blue, Earthy, Cyberpunk, yt-dlp, Terminal, Glass, Minimal, Neon Noir, Brutalist
+- **Themes** — 6 themes: Slate, Terminal, Glass, Minimal, Neon Noir, Brutalist
 - **Portable build** — ships as a self-contained Windows executable
 
 | Downloading | History | Settings |
@@ -26,13 +26,13 @@ A clean, local GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Runs as a loc
 
 ### Themes
 
-| Blue | Earthy | Cyberpunk | yt-dlp |
-|---|---|---|---|
-| ![Blue](docs/theme-previews/blue.png) | ![Earthy](docs/theme-previews/earthy.png) | ![Cyberpunk](docs/theme-previews/cyberpunk.png) | ![yt-dlp](docs/theme-previews/ytdlp.png) |
+| Slate | Terminal | Glass |
+|---|---|---|
+| ![Slate](docs/theme-previews/slate.png) | ![Terminal](docs/theme-previews/terminal.png) | ![Glass](docs/theme-previews/glass.png) |
 
-| Terminal | Glass | Minimal | Neon Noir | Brutalist |
-|---|---|---|---|---|
-| ![Terminal](docs/theme-previews/terminal.png) | ![Glass](docs/theme-previews/glass.png) | ![Minimal](docs/theme-previews/minimal.png) | ![Neon Noir](docs/theme-previews/neon.png) | ![Brutalist](docs/theme-previews/brutalist.png) |
+| Minimal | Neon Noir | Brutalist |
+|---|---|---|
+| ![Minimal](docs/theme-previews/minimal.png) | ![Neon Noir](docs/theme-previews/neon.png) | ![Brutalist](docs/theme-previews/brutalist.png) |
 
 ---
 
