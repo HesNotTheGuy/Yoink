@@ -1,2 +1,10 @@
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "cmd.exe /c ""SET PATH=C:\Program Files\nodejs;%PATH% && cd /d """ & CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName) & """ && npm run dev""", 0, False
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set wsh = CreateObject("WScript.Shell")
+Dim dir : dir = fso.GetParentFolderName(WScript.ScriptFullName)
+Dim port : port = wsh.Environment("Process")("PORT")
+Dim cmd : cmd = "cmd.exe /c """ & "cd /d """ & dir & """ && "
+If port <> "" Then
+    cmd = cmd & "SET PORT=" & port & " && "
+End If
+cmd = cmd & "call start.cmd"""
+wsh.Run cmd, 0, False
