@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
-const GUI_VERSION = "2.1.0";
+const GUI_VERSION = "2.1.1";
 
 type Mode = "video" | "audio";
 type DownloadStatus = "idle" | "pending" | "downloading" | "done" | "error";
