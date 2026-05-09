@@ -3,7 +3,7 @@
   "name": "Yoink",
   "version": "1.0.0",
   "description": "Grab videos from any page and send them to Yoink for download",
-  "permissions": ["nativeMessaging", "activeTab", "tabs", "contextMenus", "storage"],
+  "permissions": ["nativeMessaging", "activeTab", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": {
@@ -20,5 +20,11 @@
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "yoink@extension",
+      "strict_min_version": "109.0"
+    }
   }
 }

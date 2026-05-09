@@ -11,6 +11,62 @@ Right-click any page (or click the toolbar popup) to grab a video URL and send i
   - `settings.json` — shared settings (outputDir, defaultMode, etc.)
   - `yt-dlp.exe` — shared yt-dlp binary
 
+## Browser Support
+
+Built on Manifest V3 — works in:
+
+| Browser | Minimum version |
+|---|---|
+| Chrome | 88+ |
+| Edge (Chromium) | 88+ |
+| Brave | All current versions |
+| Opera | 74+ |
+| Vivaldi | All current versions |
+| Firefox | 109+ |
+
+Any Chromium-based browser will install it the same way as Chrome.
+
+## Permissions
+
+The extension requests the minimum permissions it needs. Here's exactly what each one does and what it can see:
+
+### `nativeMessaging`
+**What it does:** Lets the extension start the local helper script (`host.js`) and exchange JSON messages with it over stdin/stdout.
+
+**What it accesses:** Only the `com.yoink.helper` host registered in your Windows registry — no other native programs. The browser enforces this matching.
+
+**Why needed:** Browser extensions can't run shell commands. The helper is what actually runs `yt-dlp`. Without this permission, downloads cannot happen.
+
+### `activeTab`
+**What it does:** Grants temporary access to the current tab when you click the extension icon or use the context menu.
+
+**What it accesses:** The URL and title of the tab you're actively interacting with — and only at the moment you click. Access is revoked as soon as you navigate away or close the popup.
+
+**Why needed:** To know which video URL to send to yt-dlp. The extension does **not** read pages you haven't explicitly interacted with.
+
+### `contextMenus`
+**What it does:** Lets the extension add the "Yoink this video" item to your right-click menu.
+
+**What it accesses:** Nothing on its own — it just registers the menu item. The actual URL is only read when you click the item (which then triggers `activeTab`).
+
+**Why needed:** For the right-click → download flow.
+
+### `host_permissions: ["<all_urls>"]`
+**What it does:** Allows the extension's content script to be injected into pages so it can read the current URL.
+
+**What it accesses:** `window.location.href` and `document.title` — that's all. The content script does **not** read page content, form data, cookies, localStorage, or any other page data. It only responds to two messages: `getVideoUrl` and `getPageTitle`.
+
+**Why `<all_urls>` instead of just YouTube:** yt-dlp supports thousands of sites (Twitch, X/Twitter, Reddit, Vimeo, TikTok, etc.) — restricting to one domain would cripple the extension. You can verify in `src/content.js` (about 10 lines of code) that it only reads the URL and title.
+
+### What the extension does NOT request
+
+- ❌ `storage` — no preferences are saved by the extension itself; settings live in `%APPDATA%\Yoink\settings.json` and are managed by the helper
+- ❌ `cookies` — cookies are never read or sent
+- ❌ `webRequest` — no network interception, no traffic monitoring
+- ❌ `history` (browser history) — never accessed; download history is a separate file
+- ❌ `downloads` — yt-dlp handles file writing directly, the browser's download manager is not used
+- ❌ `tabs` — only `activeTab` is used (which is more restricted)
+
 ## Requirements
 
 - **Node.js ≥ 18** must be on your PATH (the native messaging host runs as a Node.js script)
@@ -35,8 +91,8 @@ This will:
 
 ### 2. Load the extension
 
-**Chrome / Edge:**
-1. Open `chrome://extensions` → enable **Developer mode**
+**Chrome / Edge / Brave / Opera / Vivaldi:**
+1. Open `chrome://extensions` (or your browser's equivalent) → enable **Developer mode**
 2. Click **Load unpacked** → select the `extension\src\` folder
 3. Note the extension ID shown on the card
 
@@ -44,7 +100,9 @@ This will:
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click **Load Temporary Add-on** → select `extension\src\manifest.json`
 
-### 3. Update the Chrome extension ID (Chrome only)
+The extension's Firefox ID is fixed as `yoink@extension` (set in the manifest), so no further configuration is needed for Firefox.
+
+### 3. Update the Chrome extension ID (Chromium browsers only)
 
 After loading, copy the extension ID and paste it into `%APPDATA%\Yoink\helper\manifest.json`:
 
@@ -54,11 +112,7 @@ After loading, copy the extension ID and paste it into `%APPDATA%\Yoink\helper\m
 
 Then restart the browser (or reload the extension).
 
-## Icons
-
-Place `icon-16.png`, `icon-32.png`, `icon-48.png`, `icon-128.png` in `src\icons\`.  
-Copy them from the Yoink app's `public\` folder.  
-See `src\icons\README.txt` for details.
+> Firefox does not need this step — its ID is set inside the manifest.
 
 ## How it works
 
