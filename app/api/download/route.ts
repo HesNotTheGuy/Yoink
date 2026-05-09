@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
 import { v4 as uuidv4 } from "uuid";
 import { downloads, type Download } from "@/lib/store";
+import { findYtdlp } from "@/lib/ytdlp";
 
 export async function POST(req: NextRequest) {
   const { url, mode, quality, formatId, outputDir, thumbnail, embedMetadata, embedThumbnail, cookiesFile, speedLimit } =
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
   if (speedLimit) args.push("--limit-rate", speedLimit);
   args.push("--newline", "-o", `${outputDir}\\%(title)s.%(ext)s`, url);
 
-  const ytdlp = spawn("yt-dlp", args);
+  const ytdlp = spawn(findYtdlp(), args);
   dl.proc = ytdlp;
   dl.status = "downloading";
 

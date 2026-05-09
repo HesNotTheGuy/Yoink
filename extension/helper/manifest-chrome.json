@@ -1,0 +1,7 @@
+{
+  "name": "com.yoink.helper",
+  "description": "Yoink native messaging host",
+  "path": "PLACEHOLDER_PATH_TO_LAUNCHER",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://PLACEHOLDER_EXTENSION_ID/"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "yoink-helper",
+  "version": "1.0.0",
+  "description": "Native messaging host for the Yoink browser extension",
+  "main": "host.js",
+  "engines": { "node": ">=18" }
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { findYtdlp } from "@/lib/ytdlp";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const { stdout } = await execFileAsync(
-      "yt-dlp",
+      findYtdlp(),
       ["--dump-json", "--no-download", "--no-playlist", url],
       { timeout: 20_000 }
     );

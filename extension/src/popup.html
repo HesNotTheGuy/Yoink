@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yoink</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="header-logo">🦀</span>
+    <span class="header-title">Yoink</span>
+    <span class="status-dot" id="statusDot" title="Checking helper..."></span>
+  </div>
+
+  <div class="body">
+
+    <!-- Current URL -->
+    <div class="url-display" id="urlDisplay">Loading...</div>
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btnVideo" data-mode="video">Video</button>
+      <button class="mode-btn"        id="btnAudio" data-mode="audio">Audio</button>
+    </div>
+
+    <!-- Quality -->
+    <div class="quality-row" id="qualityRow">
+      <label for="qualitySelect">Quality</label>
+      <select id="qualitySelect">
+        <option value="best">Best</option>
+        <option value="1080p">1080p</option>
+        <option value="720p">720p</option>
+        <option value="480p">480p</option>
+        <option value="360p">360p</option>
+      </select>
+    </div>
+
+    <!-- Download button -->
+    <button class="dl-btn" id="dlBtn">Download</button>
+
+    <!-- Progress (hidden until download starts) -->
+    <div class="progress-section hidden" id="progressSection">
+      <div class="progress-title" id="progressTitle">Starting...</div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="progressSpeed"></span>
+        <span id="progressEta"></span>
+      </div>
+      <div class="progress-status" id="progressStatus"></div>
+    </div>
+
+    <!-- Recent history -->
+    <div class="divider">
+      <div class="divider-line"></div>
+      <span class="divider-label">Recent</span>
+      <div class="divider-line"></div>
+    </div>
+
+    <div class="history-list" id="historyList">
+      <div class="history-empty">No downloads yet.</div>
+    </div>
+
+  </div><!-- /.body -->
+
+  <!-- Footer -->
+  <div class="footer">
+    <a href="http://localhost:3000" target="_blank">Open Yoink app</a>
+  </div>
+
+  <!--
+    Icons note: place icon-16.png, icon-32.png, icon-48.png, icon-128.png
+    inside the icons/ folder (copy from the Yoink app's public/ folder).
+  -->
+
+  <script src="popup.js"></script>
+</body>
+</html>

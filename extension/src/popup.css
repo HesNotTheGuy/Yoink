@@ -1,0 +1,273 @@
+/* Yoink Extension — Slate theme */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #070b14;
+  color: #e2e8f0;
+  width: 380px;
+  min-height: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------------
+   Header
+--------------------------------------------------------------------------- */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid #1e2d4a;
+}
+
+.header-logo {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex: 1;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7a9ab8;
+  transition: background 0.2s;
+}
+.status-dot.ok  { background: #22c55e; }
+.status-dot.err { background: #ef4444; }
+
+/* ---------------------------------------------------------------------------
+   Main body
+--------------------------------------------------------------------------- */
+.body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* URL display */
+.url-display {
+  background: #141e35;
+  border: 1px solid #1e2d4a;
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #7a9ab8;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mode toggle */
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid #1e2d4a;
+  border-radius: 6px;
+  background: #141e35;
+  color: #7a9ab8;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mode-btn:hover { background: #1e2d4a; color: #e2e8f0; }
+.mode-btn.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+
+/* Quality selector */
+.quality-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quality-row label {
+  color: #7a9ab8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.quality-row select {
+  flex: 1;
+  background: #141e35;
+  border: 1px solid #1e2d4a;
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 5px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+}
+.quality-row select:focus { outline: 2px solid #6366f1; outline-offset: -1px; }
+
+/* Download button */
+.dl-btn {
+  width: 100%;
+  padding: 9px;
+  background: #6366f1;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.dl-btn:hover:not(:disabled) { background: #4f46e5; }
+.dl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------------------
+   Progress
+--------------------------------------------------------------------------- */
+.progress-section {
+  background: #141e35;
+  border: 1px solid #1e2d4a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.progress-section.hidden { display: none; }
+
+.progress-title {
+  font-size: 12px;
+  color: #7a9ab8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-track {
+  height: 6px;
+  background: #0d1526;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.3s;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #7a9ab8;
+}
+
+.progress-status {
+  font-size: 12px;
+  color: #7a9ab8;
+  text-align: center;
+}
+.progress-status.done  { color: #22c55e; }
+.progress-status.error { color: #ef4444; }
+
+/* ---------------------------------------------------------------------------
+   History
+--------------------------------------------------------------------------- */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: #1e2d4a;
+}
+.divider-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7a9ab8;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #141e35;
+  border: 1px solid #1e2d4a;
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-width: 0;
+}
+
+.history-item-title {
+  flex: 1;
+  font-size: 12px;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.badge-video { background: #1e2d4a; color: #7a9ab8; }
+.badge-audio { background: #2d1e45; color: #a78bfa; }
+
+.history-time {
+  font-size: 11px;
+  color: #7a9ab8;
+  flex-shrink: 0;
+}
+
+.history-empty {
+  font-size: 12px;
+  color: #7a9ab8;
+  text-align: center;
+  padding: 6px 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Footer
+--------------------------------------------------------------------------- */
+.footer {
+  border-top: 1px solid #1e2d4a;
+  padding: 8px 16px;
+  text-align: center;
+}
+.footer a {
+  font-size: 12px;
+  color: #7a9ab8;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footer a:hover { color: #6366f1; }
