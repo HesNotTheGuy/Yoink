@@ -139,6 +139,36 @@ function buildFormatArgs(mode, quality) {
 }
 
 // ---------------------------------------------------------------------------
+// Subtitle args
+// ---------------------------------------------------------------------------
+function buildSubtitleArgs(subs, mode) {
+  if (!subs || !subs.enabled) return [];
+  const args = ['--write-subs', '--write-auto-subs', '--sub-langs', subs.lang || 'en'];
+  // Embed only makes sense for video downloads and yt-dlp will only embed
+  // into supported containers (mp4/mkv/webm); harmless if unsupported.
+  if (subs.embed && mode === 'video') {
+    args.push('--embed-subs');
+  } else {
+    args.push('--convert-subs', 'srt');
+  }
+  return args;
+}
+
+// ---------------------------------------------------------------------------
+// Cookies — write to a temp file we delete after the download
+// ---------------------------------------------------------------------------
+function writeCookiesFile(cookiesText) {
+  const tmp = path.join(os.tmpdir(), `yoink-cookies-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+  fs.writeFileSync(tmp, cookiesText, { encoding: 'utf8', mode: 0o600 });
+  return tmp;
+}
+
+function safeUnlink(file) {
+  if (!file) return;
+  try { fs.unlinkSync(file); } catch { /* ignore */ }
+}
+
+// ---------------------------------------------------------------------------
 // Progress / title regexes
 // ---------------------------------------------------------------------------
 const RE_PROGRESS = /\[download\]\s+([\d.]+)%\s+of\s+[\d.]+\S+\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)/;
@@ -185,14 +215,32 @@ function handleDownload(msg) {
   ensureDataDir();
 
   const ytdlp = getYtdlpPath();
-  const outputTemplate = path.join(outputDir, '%(title)s.%(ext)s');
+
+  // Filename template — default to %(title)s; ensure .%(ext)s is included
+  let template = (msg.filenameTemplate || '').trim() || '%(title)s';
+  if (!template.includes('%(ext)s')) template += '.%(ext)s';
+  const outputTemplate = path.join(outputDir, template);
+
+  // Temp cookies file (if provided) — deleted in the close handler
+  let cookiesFile = null;
+  if (msg.cookies && typeof msg.cookies === 'string' && msg.cookies.length > 0) {
+    try {
+      cookiesFile = writeCookiesFile(msg.cookies);
+    } catch (e) {
+      sendMessage({ type: 'error', message: `Failed to write cookies file: ${e.message}` });
+      process.exit(0);
+      return;
+    }
+  }
 
   const args = [
     ...buildFormatArgs(mode, quality),
+    ...buildSubtitleArgs(msg.subtitles, mode),
     '--newline',
     '-o', outputTemplate,
     url
   ];
+  if (cookiesFile) args.splice(args.length - 1, 0, '--cookies', cookiesFile);
 
   const child = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -228,6 +276,8 @@ function handleDownload(msg) {
   child.stderr.on('data', chunk => { stderrBuf += chunk.toString('utf8'); });
 
   child.on('close', code => {
+    safeUnlink(cookiesFile);
+
     // flush remaining stdout
     if (stdoutBuf.trim()) parseLine(stdoutBuf.trim());
 
@@ -252,6 +302,7 @@ function handleDownload(msg) {
   });
 
   child.on('error', err => {
+    safeUnlink(cookiesFile);
     sendMessage({ type: 'error', message: `Failed to spawn yt-dlp: ${err.message}` });
     process.exit(0);
   });

@@ -116,6 +116,116 @@ body {
 }
 .quality-row select:focus { outline: 2px solid #6366f1; outline-offset: -1px; }
 
+/* ---------------------------------------------------------------------------
+   Advanced options
+--------------------------------------------------------------------------- */
+.advanced {
+  background: #0d1424;
+  border: 1px solid #1e2d4a;
+  border-radius: 6px;
+  padding: 0;
+}
+
+.advanced > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7a9ab8;
+  padding: 7px 10px;
+  user-select: none;
+}
+.advanced > summary::-webkit-details-marker { display: none; }
+.advanced > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.15s;
+}
+.advanced[open] > summary::before { transform: rotate(90deg); }
+.advanced > summary:hover { color: #e2e8f0; }
+
+.adv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid #1e2d4a;
+  flex-wrap: wrap;
+}
+
+.adv-label {
+  color: #7a9ab8;
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.adv-input {
+  flex: 1;
+  background: #141e35;
+  border: 1px solid #1e2d4a;
+  border-radius: 4px;
+  color: #e2e8f0;
+  padding: 4px 7px;
+  font-size: 12px;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  min-width: 0;
+}
+.adv-input:focus { outline: 2px solid #6366f1; outline-offset: -1px; }
+.adv-input-sm { flex: 0 1 90px; }
+
+.adv-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.adv-check input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+.adv-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 6px 28px;
+  flex-wrap: wrap;
+}
+.adv-sub.hidden { display: none; }
+
+.adv-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #7a9ab8;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.adv-radio input[type="radio"] {
+  width: 11px;
+  height: 11px;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+.adv-hint {
+  width: 100%;
+  font-size: 10px;
+  color: #4a6180;
+  padding-left: 19px;
+  margin-top: -2px;
+}
+
 /* Download button */
 .dl-btn {
   width: 100%;

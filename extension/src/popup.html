@@ -38,6 +38,45 @@
       </select>
     </div>
 
+    <!-- Advanced options (collapsed by default) -->
+    <details class="advanced">
+      <summary>Advanced</summary>
+
+      <!-- Filename template -->
+      <div class="adv-row">
+        <label for="filenameTpl" class="adv-label">Filename</label>
+        <input type="text" id="filenameTpl" class="adv-input" placeholder="%(title)s" title="yt-dlp output template. Examples: %(uploader)s - %(title)s, %(upload_date)s %(title)s" />
+      </div>
+
+      <!-- Subtitles -->
+      <div class="adv-row">
+        <label class="adv-check">
+          <input type="checkbox" id="subsEnabled" />
+          <span>Subtitles</span>
+        </label>
+      </div>
+      <div class="adv-sub hidden" id="subsOptions">
+        <input type="text" id="subsLang" class="adv-input adv-input-sm" value="en" placeholder="en, en.*, all" title="Language code (en, fr, etc.) or 'all'" />
+        <label class="adv-radio">
+          <input type="radio" name="subsMode" value="embed" checked />
+          <span>Embed</span>
+        </label>
+        <label class="adv-radio">
+          <input type="radio" name="subsMode" value="sidecar" />
+          <span>.srt file</span>
+        </label>
+      </div>
+
+      <!-- Cookies -->
+      <div class="adv-row">
+        <label class="adv-check">
+          <input type="checkbox" id="cookiesEnabled" />
+          <span>Use this site's cookies</span>
+        </label>
+        <div class="adv-hint">For age-gated or members-only content</div>
+      </div>
+    </details>
+
     <!-- Download button -->
     <button class="dl-btn" id="dlBtn">Download</button>
 

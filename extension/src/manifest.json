@@ -3,7 +3,7 @@
   "name": "Yoink",
   "version": "1.0.0",
   "description": "Grab videos from any page and send them to Yoink for download",
-  "permissions": ["nativeMessaging", "activeTab", "contextMenus"],
+  "permissions": ["nativeMessaging", "activeTab", "contextMenus", "cookies"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": {

@@ -122,6 +122,9 @@ function handleDownload(msg, sendResponse) {
     url: msg.url,
     mode: msg.mode || 'video',
     quality: msg.quality || 'best',
-    outputDir: msg.outputDir || undefined
+    outputDir: msg.outputDir || undefined,
+    filenameTemplate: msg.filenameTemplate || undefined,
+    subtitles: msg.subtitles || undefined,
+    cookies: msg.cookies || undefined
   });
 }

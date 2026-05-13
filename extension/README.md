@@ -6,6 +6,10 @@ Right-click any page (or click the toolbar popup) to grab a video URL and send i
 
 - Adds a **"Yoink this video"** context menu item on any page
 - Toolbar popup lets you choose mode (Video/Audio) and quality, then shows live download progress
+- **Advanced options** (collapsed by default in the popup):
+  - **Custom filename template** — yt-dlp output template like `%(uploader)s - %(title)s` or `%(upload_date)s %(title)s`
+  - **Subtitles** — download subtitles in a chosen language, either embedded into the video or saved as a separate `.srt` file
+  - **Use site cookies** — pass the current page's cookies to yt-dlp for age-gated, members-only, or login-required videos
 - Reads and writes the same `%APPDATA%\Yoink\` data directory as the Yoink app:
   - `history.json` — shared download history
   - `settings.json` — shared settings (outputDir, defaultMode, etc.)
@@ -51,6 +55,25 @@ The extension requests the minimum permissions it needs. Here's exactly what eac
 
 **Why needed:** For the right-click → download flow.
 
+### `cookies`
+**What it does:** Lets the extension read browser cookies for a given URL.
+
+**What it accesses:** Only the cookies for the **specific URL you're downloading from**, and only when you **explicitly check the "Use this site's cookies" box** in the popup. The extension calls `chrome.cookies.getAll({ url: currentPageUrl })`, which returns only cookies that the browser would actually send to that URL — not your entire cookie jar.
+
+**How those cookies are used:**
+1. Formatted as a Netscape cookie file (the format yt-dlp expects)
+2. Sent to the local helper over native messaging
+3. Helper writes the file to your system temp directory with mode `0600` (owner read/write only)
+4. Helper passes `--cookies <tempfile>` to yt-dlp
+5. **Temp file is deleted as soon as yt-dlp exits** (success or failure)
+
+**Why needed:** Many sites — YouTube age-gated content, Twitch subscriber-only VODs, Vimeo private videos, Patreon-locked content — require authentication. Passing your existing browser session lets yt-dlp download these without you having to log in again or export cookies manually.
+
+**Privacy notes:**
+- The checkbox is opt-in. The default is OFF. Nothing happens with cookies unless you check it.
+- Cookies never leave your machine — they go from browser → helper → yt-dlp → temp file → deleted
+- You can verify the code path in `src/popup.js` (`getCookiesNetscape`) and `helper/host.js` (`writeCookiesFile` / `safeUnlink`)
+
 ### `host_permissions: ["<all_urls>"]`
 **What it does:** Allows the extension's content script to be injected into pages so it can read the current URL.
 
@@ -61,7 +84,6 @@ The extension requests the minimum permissions it needs. Here's exactly what eac
 ### What the extension does NOT request
 
 - ❌ `storage` — no preferences are saved by the extension itself; settings live in `%APPDATA%\Yoink\settings.json` and are managed by the helper
-- ❌ `cookies` — cookies are never read or sent
 - ❌ `webRequest` — no network interception, no traffic monitoring
 - ❌ `history` (browser history) — never accessed; download history is a separate file
 - ❌ `downloads` — yt-dlp handles file writing directly, the browser's download manager is not used
