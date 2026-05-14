@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src *;" />
+  <title>Yoink</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="header-title">Yoink</span>
+    <span class="status-dot" id="statusDot" title="Checking yt-dlp..."></span>
+  </div>
+
+  <div class="body">
+
+    <!-- Project status -->
+    <div class="project-row" id="projectRow">
+      <span class="project-label">Project</span>
+      <span class="project-name" id="projectName">No project open</span>
+    </div>
+
+    <!-- URL input -->
+    <div class="field">
+      <label for="urlInput">Video URL</label>
+      <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." spellcheck="false" />
+    </div>
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btnVideo" data-mode="video">Video</button>
+      <button class="mode-btn"        id="btnAudio" data-mode="audio">Audio</button>
+    </div>
+
+    <!-- Quality -->
+    <div class="field" id="qualityRow">
+      <label for="qualitySelect">Quality</label>
+      <select id="qualitySelect">
+        <option value="best">Best</option>
+        <option value="1080p">1080p</option>
+        <option value="720p">720p</option>
+        <option value="480p">480p</option>
+        <option value="360p">360p</option>
+      </select>
+    </div>
+
+    <!-- Auto-import toggle -->
+    <div class="field-row">
+      <label class="check">
+        <input type="checkbox" id="autoImport" checked />
+        <span>Auto-import into "Yoink Downloads" bin</span>
+      </label>
+    </div>
+
+    <!-- Advanced options -->
+    <details class="advanced">
+      <summary>Advanced</summary>
+
+      <div class="adv-row">
+        <label class="adv-label" for="filenameTpl">Filename</label>
+        <input type="text" id="filenameTpl" class="adv-input" placeholder="%(title)s" title="yt-dlp output template. Examples: %(uploader)s - %(title)s, %(upload_date)s %(title)s" />
+      </div>
+
+      <div class="adv-row">
+        <label class="adv-check">
+          <input type="checkbox" id="subsEnabled" />
+          <span>Subtitles</span>
+        </label>
+      </div>
+      <div class="adv-sub hidden" id="subsOptions">
+        <input type="text" id="subsLang" class="adv-input adv-input-sm" value="en" placeholder="en" title="Language code (en, fr, etc.) or 'all'" />
+        <label class="adv-radio">
+          <input type="radio" name="subsMode" value="embed" checked />
+          <span>Embed</span>
+        </label>
+        <label class="adv-radio">
+          <input type="radio" name="subsMode" value="sidecar" />
+          <span>.srt</span>
+        </label>
+      </div>
+
+      <div class="adv-row">
+        <label class="adv-label" for="cookiesFile">Cookies file</label>
+        <input type="text" id="cookiesFile" class="adv-input" placeholder="(optional) path to cookies.txt" />
+      </div>
+    </details>
+
+    <!-- Download button -->
+    <button class="dl-btn" id="dlBtn" disabled>Download</button>
+
+    <!-- Progress -->
+    <div class="progress-section hidden" id="progressSection">
+      <div class="progress-title" id="progressTitle">Starting...</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-meta">
+        <span id="progressSpeed"></span>
+        <span id="progressEta"></span>
+      </div>
+      <div class="progress-status" id="progressStatus"></div>
+    </div>
+
+    <!-- Recent -->
+    <div class="divider">
+      <div class="divider-line"></div>
+      <span class="divider-label">Recent</span>
+      <div class="divider-line"></div>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="history-empty">No downloads yet.</div>
+    </div>
+
+  </div>
+
+  <script src="lib/CSInterface.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

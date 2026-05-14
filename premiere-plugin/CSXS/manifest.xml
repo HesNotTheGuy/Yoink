@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="6.0"
+                   ExtensionBundleId="com.yoink.premiere"
+                   ExtensionBundleVersion="1.0.0"
+                   ExtensionBundleName="Yoink for Premiere"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <ExtensionList>
+    <Extension Id="com.yoink.premiere.panel" Version="1.0.0" />
+  </ExtensionList>
+
+  <ExecutionEnvironment>
+    <HostList>
+      <!-- Premiere Pro 13.0 (2019) through future versions -->
+      <Host Name="PPRO" Version="[13.0,99.9]" />
+    </HostList>
+    <LocaleList>
+      <Locale Code="All" />
+    </LocaleList>
+    <RequiredRuntimeList>
+      <!-- CEP 9 = lowest common denominator while still supporting modern Premiere -->
+      <RequiredRuntime Name="CSXS" Version="9.0" />
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+
+  <DispatchInfoList>
+    <Extension Id="com.yoink.premiere.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./client/index.html</MainPath>
+          <ScriptPath>./host/premiere.jsx</ScriptPath>
+          <CEFCommandLine>
+            <!-- Enable Node.js APIs inside the panel and merge contexts so
+                 we can use both Node and the browser DOM. -->
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+            <Parameter>--allow-file-access</Parameter>
+            <Parameter>--allow-file-access-from-files</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>Yoink</Menu>
+          <Geometry>
+            <Size>
+              <Height>520</Height>
+              <Width>360</Width>
+            </Size>
+            <MinSize>
+              <Height>360</Height>
+              <Width>300</Width>
+            </MinSize>
+            <MaxSize>
+              <Height>1200</Height>
+              <Width>700</Width>
+            </MaxSize>
+          </Geometry>
+          <Icons>
+            <Icon Type="Normal">./icons/icon-normal.png</Icon>
+            <Icon Type="RollOver">./icons/icon-normal.png</Icon>
+            <Icon Type="Disabled">./icons/icon-normal.png</Icon>
+            <Icon Type="DarkNormal">./icons/icon-normal.png</Icon>
+            <Icon Type="DarkRollOver">./icons/icon-normal.png</Icon>
+          </Icons>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>
