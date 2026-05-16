@@ -2,14 +2,34 @@
 param(
     [switch]$SkipBuild,
     [switch]$SkipZip,
-    [switch]$BundleYtdlp
+    [switch]$BundleYtdlp,
+    # Compile a Windows installer (.exe via Inno Setup) after the build.
+    # Implies -BundleYtdlp because the installer wants the full bundle.
+    # Will auto-download Inno Setup if it's not already installed.
+    [switch]$Installer,
+    # Read the Yoink version from app/page.tsx GUI_VERSION (stamped into
+    # the installer's Add/Remove Programs entry). Override via -AppVersion.
+    [string]$AppVersion
 )
 
 $ErrorActionPreference = "Stop"
 
+# Installer requires the full bundle to install yt-dlp alongside
+if ($Installer) { $BundleYtdlp = $true }
+
 $AppName  = if ($BundleYtdlp) { "ytdlp-gui-full" } else { "ytdlp-gui" }
 $AppTitle = "yt-dlp GUI"
 $Port     = 3000
+
+# Resolve the GUI version - read from app/page.tsx unless caller overrode it
+if (-not $AppVersion) {
+    $pageFile = Join-Path $PSScriptRoot "app\page.tsx"
+    if (Test-Path $pageFile) {
+        $verMatch = Select-String -Path $pageFile -Pattern 'const GUI_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
+        if ($verMatch) { $AppVersion = $verMatch.Matches[0].Groups[1].Value }
+    }
+    if (-not $AppVersion) { $AppVersion = "0.0.0" }
+}
 
 $ScriptDir = $PSScriptRoot
 $DistRoot  = Join-Path $ScriptDir "dist"
@@ -419,6 +439,71 @@ if ($SkipZip) {
 }
 
 # -------------------------------------------------------------------
+# Optional Step: Inno Setup installer
+# -------------------------------------------------------------------
+$InstallerPath = $null
+if ($Installer) {
+    Write-Host ""
+    Write-Host "[+] Compiling Windows installer (Inno Setup)..." -ForegroundColor Yellow
+
+    # Locate ISCC.exe (Inno Setup compiler)
+    $isccCandidates = @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 5\ISCC.exe",
+        "${env:ProgramFiles}\Inno Setup 5\ISCC.exe"
+    )
+    $iscc = $isccCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+    if (-not $iscc) {
+        Write-Host "  Inno Setup not found." -ForegroundColor DarkYellow
+        $reply = Read-Host "  Download and install Inno Setup automatically? (y/N)"
+        if ($reply -match '^[Yy]') {
+            $isExe = Join-Path $env:TEMP "innosetup-installer.exe"
+            Write-Host "  Downloading from jrsoftware.org..." -ForegroundColor DarkGray
+            try {
+                Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile $isExe -UseBasicParsing -ErrorAction Stop
+                Write-Host "  Installing silently (this triggers a UAC prompt)..." -ForegroundColor DarkGray
+                $proc = Start-Process -FilePath $isExe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+                Remove-Item $isExe -Force -ErrorAction SilentlyContinue
+                if ($proc.ExitCode -ne 0) { throw "Inno Setup installer exited with code $($proc.ExitCode)" }
+                # Re-detect
+                $iscc = $isccCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+                if ($iscc) { Write-Host "  Installed: $iscc" -ForegroundColor Green }
+            } catch {
+                Write-Host "  Auto-install failed: $_" -ForegroundColor Red
+                Write-Host "  Install Inno Setup manually from https://jrsoftware.org/isdl.php" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "  Skipping installer build." -ForegroundColor DarkGray
+            Write-Host "  Install Inno Setup from https://jrsoftware.org/isdl.php to enable -Installer." -ForegroundColor DarkGray
+        }
+    }
+
+    if ($iscc) {
+        $issFile = Join-Path $ScriptDir "installer\yoink.iss"
+        if (-not (Test-Path $issFile)) {
+            Write-Host "  ERROR: $issFile not found." -ForegroundColor Red
+        } else {
+            Write-Host "  Compiling with version $AppVersion..." -ForegroundColor DarkGray
+            $isccArgs = @("/DAppVersion=$AppVersion", "/Qp", $issFile)
+            $proc = Start-Process -FilePath $iscc -ArgumentList $isccArgs -Wait -NoNewWindow -PassThru
+            if ($proc.ExitCode -eq 0) {
+                $InstallerPath = Join-Path $DistRoot "Yoink-Setup-$AppVersion.exe"
+                if (Test-Path $InstallerPath) {
+                    $instMB = [math]::Round((Get-Item $InstallerPath).Length / 1048576, 1)
+                    Write-Host "  Created: $InstallerPath ($instMB MB)" -ForegroundColor Green
+                } else {
+                    Write-Host "  WARNING: ISCC succeeded but output not found at $InstallerPath" -ForegroundColor DarkYellow
+                }
+            } else {
+                Write-Host "  ISCC exited with code $($proc.ExitCode) - installer not produced." -ForegroundColor Red
+            }
+        }
+    }
+}
+
+# -------------------------------------------------------------------
 # Cleanup: remove production .next/ so dev mode starts fresh
 # -------------------------------------------------------------------
 $nextDir = Join-Path $ScriptDir ".next"
@@ -439,6 +524,9 @@ Write-Host ""
 Write-Host "  Portable folder : $AppDir"
 if (-not $SkipZip) {
     Write-Host "  ZIP to send     : $ZipPath"
+}
+if ($InstallerPath -and (Test-Path $InstallerPath)) {
+    Write-Host "  Installer (exe) : $InstallerPath"
 }
 Write-Host ""
 Write-Host "  Recipient setup:" -ForegroundColor Cyan

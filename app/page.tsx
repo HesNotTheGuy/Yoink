@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { THEMES, THEME_CSS, THEME_KEYS, type Theme } from "@/lib/themes";
 
-const GUI_VERSION = "2.1.1";
+const GUI_VERSION = "2.2.0";
 
 type Mode = "video" | "audio";
 type DownloadStatus = "idle" | "pending" | "downloading" | "done" | "error";

@@ -57,9 +57,27 @@ Then open [http://localhost:3000](http://localhost:3000) — or use `launch.cmd`
 
 ---
 
-## Portable Build
+## Distributions
 
-Run `build-portable.ps1` to produce a self-contained distribution under `dist/` that bundles Node.js, yt-dlp, and ffmpeg.
+Three flavors, pick whichever fits:
+
+| Build | Description | Best for |
+|---|---|---|
+| **Installer (.exe)** | Traditional Windows installer. Adds Yoink to Start Menu so it shows up in Windows Search, registers in Add/Remove Programs, optional desktop shortcut. | Most users |
+| **Portable Full (.zip)** | Self-contained folder with everything (Node.js, ffmpeg, yt-dlp). Just unzip and run. | USB-stick / no admin |
+| **Portable Standard (.zip)** | Same as Full but ships without yt-dlp.exe (you supply it). Smaller download. | Already have yt-dlp |
+
+### Building from source
+
+All three are produced by `build-portable.ps1`:
+
+```powershell
+.\build-portable.ps1                # standard portable zip
+.\build-portable.ps1 -BundleYtdlp   # full portable zip (with yt-dlp)
+.\build-portable.ps1 -Installer     # installer .exe (implies -BundleYtdlp)
+```
+
+The installer build uses [Inno Setup](https://jrsoftware.org/isdl.php) — if it's not installed the script will offer to download and silently install it for you.
 
 ---
 
