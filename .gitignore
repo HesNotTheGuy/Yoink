@@ -3,6 +3,7 @@ node_modules/
 
 # Next.js build output
 .next/
+tsconfig.tsbuildinfo
 
 # Built distributions (rebuild with build-portable.ps1)
 dist/

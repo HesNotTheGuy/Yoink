@@ -7,7 +7,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 await mkdir(OUT, { recursive: true });
 
-// Mirror of THEME_CSS from app/page.tsx
+// ⚠ Mirror of `lib/themes.ts` THEME_CSS. The TS file is the source of truth.
+// We duplicate here because this .mjs script runs outside the Next.js build
+// and can't directly import a TypeScript module without a transpiler.
+// If you edit themes in `lib/themes.ts`, update this object to match.
 const THEME_CSS = {
   slate: `
     :root {

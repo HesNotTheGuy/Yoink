@@ -2,11 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
 import { v4 as uuidv4 } from "uuid";
 import { downloads, type Download } from "@/lib/store";
-import { findYtdlp } from "@/lib/ytdlp";
+import {
+  findYtdlp,
+  buildFormatArgs,
+  buildSubtitleArgs,
+  buildTailArgs,
+  parseProgressLine,
+  parseTitleLine,
+  type SubtitleOptions,
+} from "@/lib/ytdlp";
 
 export async function POST(req: NextRequest) {
-  const { url, mode, quality, formatId, outputDir, thumbnail, embedMetadata, embedThumbnail, cookiesFile, speedLimit } =
-    await req.json();
+  const {
+    url,
+    mode,
+    quality,
+    formatId,
+    outputDir,
+    thumbnail,
+    embedMetadata,
+    embedThumbnail,
+    cookiesFile,
+    speedLimit,
+    subtitles,
+  }: {
+    url: string;
+    mode: "video" | "audio";
+    quality: string;
+    formatId?: string;
+    outputDir: string;
+    thumbnail?: string;
+    embedMetadata?: boolean;
+    embedThumbnail?: boolean;
+    cookiesFile?: string;
+    speedLimit?: string;
+    subtitles?: SubtitleOptions;
+  } = await req.json();
 
   if (!url || !outputDir) {
     return NextResponse.json({ error: "Missing url or outputDir" }, { status: 400 });
@@ -32,34 +63,17 @@ export async function POST(req: NextRequest) {
   };
   downloads.set(id, dl);
 
-  // Build yt-dlp args
-  const args: string[] = [];
-
-  if (mode === "audio") {
-    args.push("-x", "--audio-format", "mp3", "--audio-quality", "0");
-    if (formatId && formatId !== "bestvideo+bestaudio/best") args.push("-f", formatId);
-    if (embedMetadata) args.push("--embed-metadata");
-    if (embedThumbnail) args.push("--embed-thumbnail");
-  } else {
-    if (formatId && formatId !== "bestvideo+bestaudio/best") {
-      args.push("-f", formatId);
-    } else {
-      const formatMap: Record<string, string> = {
-        best: "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "1080p": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]",
-        "720p": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]",
-        "480p": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]",
-        "360p": "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]",
-      };
-      args.push("-f", formatMap[quality] ?? formatMap["best"]);
-    }
-    args.push("--merge-output-format", "mp4");
-    if (embedMetadata) args.push("--embed-metadata", "--embed-chapters");
-  }
-
-  if (cookiesFile) args.push("--cookies", cookiesFile);
-  if (speedLimit) args.push("--limit-rate", speedLimit);
-  args.push("--newline", "-o", `${outputDir}\\%(title)s.%(ext)s`, url);
+  // Build args via the shared library
+  const args = [
+    ...buildFormatArgs({ mode, quality, formatId, embedMetadata, embedThumbnail }),
+    ...buildSubtitleArgs(subtitles, mode),
+    ...buildTailArgs({
+      cookiesFile,
+      speedLimit,
+      outputTemplate: `${outputDir}\\%(title)s.%(ext)s`,
+    }),
+    url,
+  ];
 
   const ytdlp = spawn(findYtdlp(), args);
   dl.proc = ytdlp;
@@ -67,26 +81,23 @@ export async function POST(req: NextRequest) {
 
   const broadcast = (line: string) => dl.subscribers.forEach((cb) => cb(line));
 
-  const progressRe = /\[download\]\s+([\d.]+)%\s+of\s+[\d.]+\S+\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)/;
-  const titleRe = /\[(?:download|info)\].*Destination:\s*.*[/\\](.+)$/;
-
   ytdlp.stdout.on("data", (chunk: Buffer) => {
     for (const line of chunk.toString().split("\n")) {
       if (!line.trim()) continue;
       broadcast(JSON.stringify({ type: "log", text: line }));
 
-      const pm = line.match(progressRe);
-      if (pm) {
-        dl.progress = parseFloat(pm[1]);
-        dl.speed = pm[2];
-        dl.eta = pm[3];
-        broadcast(JSON.stringify({ type: "progress", progress: dl.progress, speed: dl.speed, eta: dl.eta }));
+      const progress = parseProgressLine(line);
+      if (progress) {
+        dl.progress = progress.progress;
+        dl.speed = progress.speed;
+        dl.eta = progress.eta;
+        broadcast(JSON.stringify({ type: "progress", ...progress }));
       }
 
-      const tm = line.match(titleRe);
-      if (tm && !dl.title) {
-        dl.title = tm[1];
-        broadcast(JSON.stringify({ type: "title", title: dl.title }));
+      const title = parseTitleLine(line);
+      if (title && !dl.title) {
+        dl.title = title;
+        broadcast(JSON.stringify({ type: "title", title }));
       }
     }
   });

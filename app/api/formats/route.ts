@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { findYtdlp } from "@/lib/ytdlp";
-
-const execFileAsync = promisify(execFile);
+import { dumpJson } from "@/lib/ytdlp";
 
 export interface Format {
   format_id: string;
@@ -21,13 +17,9 @@ export async function GET(req: NextRequest) {
   if (!url) return NextResponse.json({ error: "Missing url" }, { status: 400 });
 
   try {
-    const { stdout } = await execFileAsync(
-      findYtdlp(),
-      ["--dump-json", "--no-download", "--no-playlist", url],
-      { timeout: 20_000 }
-    );
-    const info = JSON.parse(stdout.trim().split("\n")[0]);
-    const formats: Format[] = (info.formats ?? []).map((f: Format) => ({
+    const info = await dumpJson(url);
+    const rawFormats = (info.formats as Format[] | undefined) ?? [];
+    const formats: Format[] = rawFormats.map((f) => ({
       format_id: f.format_id,
       ext: f.ext,
       resolution: f.resolution ?? "audio only",

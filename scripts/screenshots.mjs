@@ -7,7 +7,9 @@ await mkdir(OUT, { recursive: true });
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Mirror THEME_CSS for direct injection (bypasses React/localStorage timing)
+// ⚠ Mirror of `lib/themes.ts` THEME_CSS. Source of truth lives in TS.
+// Duplicated here for direct injection in Puppeteer (bypasses React state).
+// Update this when themes change in lib/themes.ts.
 const THEME_CSS = {
   slate: `
     :root {
