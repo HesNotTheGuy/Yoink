@@ -180,11 +180,12 @@ const browser = await puppeteer.launch({ headless: true });
 const page    = await browser.newPage();
 await page.setViewport({ width: 900, height: 600, deviceScaleFactor: 2 });
 
-// Reset settings to clean state
+// Save current settings, then swap in placeholder values for the screenshot run
+const savedSettings = await fetch(`${BASE}/api/settings`).then(r => r.json()).catch(() => null);
 await fetch(`${BASE}/api/settings`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ outputDir: 'C:\\Downloads', defaultMode: 'video', defaultQuality: 'best', embedMetadata: true, embedThumbnail: true, cookiesFile: '', speedLimit: '' }),
+  body: JSON.stringify({ outputDir: 'C:\\Users\\You\\Downloads', defaultMode: 'video', defaultQuality: 'best', embedMetadata: true, embedThumbnail: true, cookiesFile: '', speedLimit: '' }),
 });
 
 // Load the page once, then inject CSS per theme
@@ -209,6 +210,15 @@ for (const theme of themes) {
 
   await page.screenshot({ path: `${OUT}/${theme}.png`, fullPage: false });
   console.log(`  ${theme}.png`);
+}
+
+// Restore the user's real settings
+if (savedSettings) {
+  await fetch(`${BASE}/api/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(savedSettings),
+  });
 }
 
 await browser.close();

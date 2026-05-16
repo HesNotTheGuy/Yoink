@@ -120,12 +120,15 @@ async function shot(name) {
   console.log(`  ${name}.png`);
 }
 
-async function resetSettings() {
+// Save current settings so we can restore them after screenshots are captured
+const savedSettings = await fetch(`${BASE}/api/settings`).then(r => r.json()).catch(() => null);
+
+async function applyScreenshotSettings() {
   await fetch(`${BASE}/api/settings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      outputDir: 'C:\\Downloads',
+      outputDir: 'C:\\Users\\You\\Downloads',
       defaultMode: 'video',
       defaultQuality: 'best',
       embedMetadata: true,
@@ -136,7 +139,16 @@ async function resetSettings() {
   });
 }
 
-await resetSettings();
+async function restoreSettings() {
+  if (!savedSettings) return;
+  await fetch(`${BASE}/api/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(savedSettings),
+  });
+}
+
+await applyScreenshotSettings();
 
 // ── 1. Main UI (Slate) ─────────────────────────────────────────────────────
 await page.goto(BASE, { waitUntil: 'networkidle0' });
@@ -186,9 +198,9 @@ await shot('02-downloading');
 // ── 3. History ─────────────────────────────────────────────────────────────
 await fetch(`${BASE}/api/history`, { method: 'DELETE' });
 for (const entry of [
-  { id: 'a3', url: 'https://youtube.com/watch?v=3', title: 'Blinding Lights',         thumbnail: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/mqdefault.jpg', mode: 'video', outputDir: 'C:\\Downloads', status: 'done', completedAt: Date.now() - 300000 },
-  { id: 'a2', url: 'https://youtube.com/watch?v=2', title: 'Bohemian Rhapsody',       thumbnail: 'https://i.ytimg.com/vi/fJ9rUzIMcZQ/mqdefault.jpg',  mode: 'audio', outputDir: 'C:\\Downloads', status: 'done', completedAt: Date.now() - 120000 },
-  { id: 'a1', url: 'https://youtube.com/watch?v=1', title: 'Never Gonna Give You Up', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg', mode: 'video', outputDir: 'C:\\Downloads', status: 'done', completedAt: Date.now() -  60000 },
+  { id: 'a3', url: 'https://youtube.com/watch?v=3', title: 'Blinding Lights',         thumbnail: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/mqdefault.jpg', mode: 'video', outputDir: 'C:\\Users\\You\\Downloads', status: 'done', completedAt: Date.now() - 300000 },
+  { id: 'a2', url: 'https://youtube.com/watch?v=2', title: 'Bohemian Rhapsody',       thumbnail: 'https://i.ytimg.com/vi/fJ9rUzIMcZQ/mqdefault.jpg',  mode: 'audio', outputDir: 'C:\\Users\\You\\Downloads', status: 'done', completedAt: Date.now() - 120000 },
+  { id: 'a1', url: 'https://youtube.com/watch?v=1', title: 'Never Gonna Give You Up', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg', mode: 'video', outputDir: 'C:\\Users\\You\\Downloads', status: 'done', completedAt: Date.now() -  60000 },
 ]) {
   await fetch(`${BASE}/api/history`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
 }
@@ -226,7 +238,7 @@ await injectTheme(page, 'neon');
 await shot('07-neon-theme');
 
 // ── Cleanup ────────────────────────────────────────────────────────────────
-await resetSettings();
+await restoreSettings();
 await fetch(`${BASE}/api/history`, { method: 'DELETE' }).catch(() => {});
 
 await browser.close();
