@@ -1129,6 +1129,14 @@ export default function Home() {
                         >
                           Re-use
                         </button>
+                        {entry.status === "done" && (
+                          <a
+                            href={`/${entry.mode === "audio" ? "audio" : "edit"}?file=${encodeURIComponent(`${entry.outputDir}\\${entry.title}`)}`}
+                            className="text-xs px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-center"
+                          >
+                            Edit
+                          </a>
+                        )}
                         <button
                           onClick={() => openFolder(entry.outputDir)}
                           className="text-xs px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
