@@ -70,10 +70,41 @@ if ($SkipBuild) {
     $env:PATH = "C:\Program Files\nodejs;$env:PATH"
     Push-Location $ScriptDir
 
-    # Temporarily patch next.config.ts to add standalone output for this build only
+    # Temporarily patch next.config.ts to add standalone output for this build
+    # only. outputFileTracingExcludes is critical: without it Next.js traces
+    # the whole project root including dist/ (which can be GIGABYTES of prior
+    # build artifacts), node_modules already-pruned files, and dev-only stuff
+    # we never want shipped to end users.
     $configPath = Join-Path $ScriptDir "next.config.ts"
     $origConfig = Get-Content $configPath -Raw
-    $buildConfig = "import type { NextConfig } from 'next';`nconst nextConfig: NextConfig = { output: 'standalone' };`nexport default nextConfig;`n"
+    $buildConfig = @"
+import type { NextConfig } from 'next';
+const nextConfig: NextConfig = {
+  output: 'standalone',
+  outputFileTracingRoot: __dirname,
+  outputFileTracingExcludes: {
+    '*': [
+      'dist/**/*',
+      '.next/standalone/**/*',
+      '.git/**/*',
+      '.claude/**/*',
+      'docs/**/*',
+      'extension/**/*',
+      'premiere-plugin/**/*',
+      'installer/**/*',
+      'scripts/**/*',
+      'data/**/*',
+      'public/icon-src.svg',
+      'node_modules/typescript/**/*',
+      'node_modules/puppeteer/**/*',
+      'node_modules/puppeteer-core/**/*',
+      'node_modules/@puppeteer/**/*',
+      'node_modules/sharp/**/*',
+    ],
+  },
+};
+export default nextConfig;
+"@
     [System.IO.File]::WriteAllText($configPath, $buildConfig)
 
     try {
