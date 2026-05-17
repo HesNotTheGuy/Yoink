@@ -448,8 +448,10 @@ if ($Installer) {
 
     # Locate ISCC.exe (Inno Setup compiler)
     $isccCandidates = @(
+        "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+        "${env:LOCALAPPDATA}\Programs\Inno Setup 5\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 5\ISCC.exe",
         "${env:ProgramFiles}\Inno Setup 5\ISCC.exe"
     )
@@ -481,23 +483,31 @@ if ($Installer) {
     }
 
     if ($iscc) {
-        $issFile = Join-Path $ScriptDir "installer\yoink.iss"
+        $issDir  = Join-Path $ScriptDir "installer"
+        $issFile = Join-Path $issDir "yoink.iss"
         if (-not (Test-Path $issFile)) {
             Write-Host "  ERROR: $issFile not found." -ForegroundColor Red
         } else {
             Write-Host "  Compiling with version $AppVersion..." -ForegroundColor DarkGray
-            $isccArgs = @("/DAppVersion=$AppVersion", "/Qp", $issFile)
-            $proc = Start-Process -FilePath $iscc -ArgumentList $isccArgs -Wait -NoNewWindow -PassThru
-            if ($proc.ExitCode -eq 0) {
-                $InstallerPath = Join-Path $DistRoot "Yoink-Setup-$AppVersion.exe"
-                if (Test-Path $InstallerPath) {
-                    $instMB = [math]::Round((Get-Item $InstallerPath).Length / 1048576, 1)
-                    Write-Host "  Created: $InstallerPath ($instMB MB)" -ForegroundColor Green
+            # IMPORTANT: cd into the installer directory and pass just the
+            # bare filename. ISCC + Start-Process -ArgumentList mishandles
+            # script paths that contain spaces ("Claude Projects").
+            Push-Location $issDir
+            try {
+                $proc = Start-Process -FilePath $iscc -ArgumentList @("/DAppVersion=$AppVersion", "yoink.iss") -Wait -NoNewWindow -PassThru
+                if ($proc.ExitCode -eq 0) {
+                    $InstallerPath = Join-Path $DistRoot "Yoink-Setup-$AppVersion.exe"
+                    if (Test-Path $InstallerPath) {
+                        $instMB = [math]::Round((Get-Item $InstallerPath).Length / 1048576, 1)
+                        Write-Host "  Created: $InstallerPath ($instMB MB)" -ForegroundColor Green
+                    } else {
+                        Write-Host "  WARNING: ISCC succeeded but output not found at $InstallerPath" -ForegroundColor DarkYellow
+                    }
                 } else {
-                    Write-Host "  WARNING: ISCC succeeded but output not found at $InstallerPath" -ForegroundColor DarkYellow
+                    Write-Host "  ISCC exited with code $($proc.ExitCode) - installer not produced." -ForegroundColor Red
                 }
-            } else {
-                Write-Host "  ISCC exited with code $($proc.ExitCode) - installer not produced." -ForegroundColor Red
+            } finally {
+                Pop-Location
             }
         }
     }
