@@ -1,11 +1,16 @@
 {
   "name": "yoink",
-  "version": "2.0.0",
+  "version": "3.0.0-pre",
   "private": true,
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "next dev",
+    "dev:electron": "concurrently --kill-others -n next,electron -c blue,magenta \"next dev\" \"wait-on http://localhost:3000 && tsc -p electron && cross-env NODE_ENV=development electron dist-electron/electron/main.js\"",
     "build": "next build",
-    "start": "next start"
+    "build:electron": "tsc -p electron && next build && electron-builder",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "next": "^16.1.6",
@@ -19,9 +24,16 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10",
+    "@vitest/coverage-v8": "^2.1.9",
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "postcss": "^8",
     "puppeteer": "^24.40.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.9",
+    "wait-on": "^8.0.5"
   }
 }
