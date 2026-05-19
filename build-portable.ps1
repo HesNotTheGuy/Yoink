@@ -140,6 +140,31 @@ foreach ($d in @($AppDir, $ServerDir, $NodeDir, $FfmpegDir, $YtdlpDir)) {
 Write-Host "  Copying standalone server..."
 Copy-Item "$StandaloneDir\*" $ServerDir -Recurse -Force
 
+# Next.js standalone tracing incidentally copies a bunch of dev/config
+# files that aren't needed at runtime. Strip them so the install dir
+# stays lean and doesn't expose the source-side build script or TS
+# source files (those have all been compiled into .next/server/).
+Write-Host "  Pruning dev/build files from server folder..."
+$serverBloat = @(
+    'README.md', 'UNLICENSE',
+    'next.config.ts', 'postcss.config.mjs',
+    'tsconfig.json', 'tsconfig.tsbuildinfo',
+    'package-lock.json',
+    'app', 'lib',
+    'launch.cmd', 'start.cmd', 'start-hidden.vbs',
+    'build-portable.ps1', 'rasterize-svg.mjs',
+    'yoink.ico', 'ytdlp-gui.ico'
+)
+$prunedCount = 0
+foreach ($item in $serverBloat) {
+    $p = Join-Path $ServerDir $item
+    if (Test-Path $p) {
+        Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue
+        $prunedCount++
+    }
+}
+Write-Host "  Pruned $prunedCount file(s) and folder(s)." -ForegroundColor DarkGray
+
 Write-Host "  Copying .next/static..."
 $StaticSrc = Join-Path $ScriptDir ".next\static"
 $StaticDst = Join-Path $ServerDir ".next\static"
