@@ -342,6 +342,10 @@ $startServerCmd += "`"%APPDIR%node\node.exe`" `"%APPDIR%server\server.js`"`r`n"
 
 # start-server.vbs  --  hides the CMD window, forwards PORT env var.
 # Single-quoted here-string preserves the literal VBS source - no PS escaping.
+# CRITICAL: VBScript on Windows requires CRLF line endings. If the file is
+# saved with LF-only, the parser sees one giant line and emits
+# 'Wrong number of arguments or invalid property assignment' on line 1.
+# Normalize all line endings to CRLF before writing.
 $startServerVbs = @'
 Set wsh = CreateObject("WScript.Shell")
 Dim appDir
@@ -351,6 +355,7 @@ Dim cmd : cmd = "cmd /c """ & appDir & "start-server.cmd"""
 If port <> "" Then cmd = "cmd /c SET PORT=" & port & " && """ & appDir & "start-server.cmd"""
 wsh.Run cmd, 0, False
 '@
+$startServerVbs = ($startServerVbs -replace "`r`n", "`n") -replace "`n", "`r`n"
 [System.IO.File]::WriteAllText((Join-Path $AppDir "start-server.vbs"), $startServerVbs)
 
 # launch.cmd  -- user double-clicks this
