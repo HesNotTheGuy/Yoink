@@ -12,5 +12,14 @@ resetTimer();
 
 export async function POST() {
   resetTimer();
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, app: "yoink" });
+}
+
+// GET is used by launch.cmd to detect "is Yoink already running on this port?"
+// The response includes the literal string "yoink" so launch.cmd can verify
+// it isn't talking to some unrelated dev server (Vite, Next.js for another
+// project, etc.) that happens to be on the same port.
+export async function GET() {
+  resetTimer();
+  return NextResponse.json({ ok: true, app: "yoink" });
 }

@@ -2,8 +2,10 @@
 SETLOCAL
 SET APPDIR=%~dp0
 
-REM ── Check if a Yoink server is already running on port 3000 ───────────────
-curl -s -m 2 http://localhost:3000/api/ping >nul 2>&1
+REM ── Check if Yoink (specifically) is already running on port 3000 ────────
+REM Verify the responding server is Yoink and not some other app on that port
+REM by checking the response contains the literal string "yoink".
+curl -s -m 2 http://localhost:3000/api/ping 2>nul | findstr /C:"yoink" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
     SET PORT=3000
     goto OPEN
