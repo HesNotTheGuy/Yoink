@@ -500,6 +500,40 @@ if ($SkipZip) {
 
     $zipMB = [math]::Round((Get-Item $ZipPath).Length / 1048576, 1)
     Write-Host "  Created: $ZipPath ($zipMB MB)" -ForegroundColor Green
+
+    # Also bundle the browser extension + Premiere plugin as standalone ZIPs.
+    # These contain only runtime files - no dev configs, no source/build
+    # artifacts. The full source for each lives in the GitHub repo for devs
+    # who want to inspect or modify.
+    $extSrc = Join-Path $ScriptDir "extension"
+    if (Test-Path $extSrc) {
+        Write-Host "  Bundling browser extension..."
+        $extStaging = Join-Path $env:TEMP "yoink-ext-stage-$PID"
+        if (Test-Path $extStaging) { Remove-Item $extStaging -Recurse -Force }
+        New-Item -ItemType Directory -Path $extStaging | Out-Null
+        Copy-Item $extSrc (Join-Path $extStaging "Yoink-Extension") -Recurse
+        $extZip = Join-Path $DistRoot "Yoink-Extension-$AppVersion.zip"
+        if (Test-Path $extZip) { Remove-Item $extZip -Force }
+        Compress-Archive -Path (Join-Path $extStaging "Yoink-Extension") -DestinationPath $extZip -CompressionLevel Optimal
+        Remove-Item $extStaging -Recurse -Force -ErrorAction SilentlyContinue
+        $extKB = [math]::Round((Get-Item $extZip).Length / 1024, 0)
+        Write-Host "  Created: $extZip ($extKB KB)" -ForegroundColor Green
+    }
+
+    $premSrc = Join-Path $ScriptDir "premiere-plugin"
+    if (Test-Path $premSrc) {
+        Write-Host "  Bundling Premiere plugin..."
+        $premStaging = Join-Path $env:TEMP "yoink-prem-stage-$PID"
+        if (Test-Path $premStaging) { Remove-Item $premStaging -Recurse -Force }
+        New-Item -ItemType Directory -Path $premStaging | Out-Null
+        Copy-Item $premSrc (Join-Path $premStaging "Yoink-Premiere-Plugin") -Recurse
+        $premZip = Join-Path $DistRoot "Yoink-Premiere-Plugin-$AppVersion.zip"
+        if (Test-Path $premZip) { Remove-Item $premZip -Force }
+        Compress-Archive -Path (Join-Path $premStaging "Yoink-Premiere-Plugin") -DestinationPath $premZip -CompressionLevel Optimal
+        Remove-Item $premStaging -Recurse -Force -ErrorAction SilentlyContinue
+        $premKB = [math]::Round((Get-Item $premZip).Length / 1024, 0)
+        Write-Host "  Created: $premZip ($premKB KB)" -ForegroundColor Green
+    }
 }
 
 # -------------------------------------------------------------------
