@@ -15,7 +15,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import type { HistoryEntry } from "@/lib/api-client";
-import type { Settings } from "@/app/api/settings/route";
+import type { Settings } from "@/lib/types";
 
 export function getDataDir(): string {
   if (process.platform === "win32" && process.env.APPDATA) {

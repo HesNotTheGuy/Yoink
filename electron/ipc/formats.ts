@@ -12,7 +12,7 @@
 
 import type { IpcMain } from "electron";
 import { dumpJson } from "@/lib/ytdlp";
-import type { Format } from "@/app/api/formats/route";
+import type { Format } from "@/lib/types";
 
 export function register(ipcMain: IpcMain): void {
   ipcMain.handle("formats:get", async (_event, url: string): Promise<Format[]> => {

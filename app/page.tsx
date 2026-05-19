@@ -139,7 +139,6 @@ export default function Home() {
     error: string;
   }>({ fromVersion: "", toVersion: "", status: "idle", error: "" });
   const [ytdlpVersion, setYtdlpVersion] = useState("");
-  const [buildVariant, setBuildVariant] = useState("");
 
   // Panels
   const [showSettings, setShowSettings] = useState(false);
@@ -193,26 +192,6 @@ export default function Home() {
   useEffect(() => {
     getHistory()
       .then((data) => setHistory(data as HistoryEntry[]))
-      .catch(() => {});
-  }, []);
-
-  // ── Heartbeat ───────────────────────────────────────────────────────────
-  // Only relevant in the Next.js dev/standalone server build, where the
-  // /api/ping route auto-shuts down the server after 10s of silence.
-  // In Electron there is no Next.js server, so the heartbeat is skipped.
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.yoink) return;
-    const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
-    ping();
-    const id = setInterval(ping, 5_000);
-    return () => clearInterval(id);
-  }, []);
-
-  // ── Load build variant ──────────────────────────────────────────────────
-  useEffect(() => {
-    fetch("/build-info.json")
-      .then((r) => r.json())
-      .then(({ variant }) => { if (variant) setBuildVariant(variant); })
       .catch(() => {});
   }, []);
 
@@ -943,7 +922,7 @@ export default function Home() {
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <div className="text-center text-xs text-zinc-600 pb-4 space-y-0.5">
-        <p>GUI v{GUI_VERSION}{buildVariant && ` · ${buildVariant}`}</p>
+        <p>GUI v{GUI_VERSION}</p>
         <p>made by The Guy</p>
         {ytdlpVersion && <p className="text-zinc-700">yt-dlp {ytdlpVersion}</p>}
       </div>

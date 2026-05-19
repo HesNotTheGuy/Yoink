@@ -1,28 +1,22 @@
 /**
  * api-client.ts — single API surface used by every React page.
  *
- * Each function prefers the Electron IPC bridge (`window.yoink.*`) when
- * present, and falls back to `fetch('/api/...')` against the Next.js
- * server otherwise. That lets the same renderer code work in:
- *   - the Next.js dev server (browser, no Electron)
- *   - the Electron production build (no Next.js server)
+ * Every function delegates to the Electron IPC bridge exposed on
+ * `window.yoink` by `electron/preload.ts`. The Next.js API routes that
+ * used to back these calls in dev mode have been removed; this build
+ * only runs inside the Electron host.
  *
- * During the v2 → v3 migration, handlers will be added to the Electron
- * preload one by one. The fetch fallback keeps the app working through
- * the whole transition - no big-bang switch.
- *
- * Once every handler is ported and the Electron build is the only
- * shipped artifact, the fetch fallbacks can be deleted and the
- * Next.js API routes can be removed.
+ * If the bridge is missing (e.g. someone loads the static export
+ * directly in a browser) every call throws a clear error rather than
+ * silently failing — see `requireElectron()` below.
  */
 
-import type { Settings } from "@/app/api/settings/route";
-import type { Format } from "@/app/api/formats/route";
+import type { Settings, Format } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
-//  Types - the shared contract between renderer and main process / API route.
+//  Types - the shared contract between renderer and main process.
 //  These are deliberately defined here (not duplicated per call site) so the
-//  TypeScript signatures match across the IPC and fetch paths.
+//  TypeScript signatures match across the IPC boundary.
 // ---------------------------------------------------------------------------
 
 export interface HistoryEntry {
@@ -130,212 +124,102 @@ declare global {
   }
 }
 
-const isElectron = (): boolean =>
-  typeof window !== "undefined" && typeof window.yoink !== "undefined";
+// ---------------------------------------------------------------------------
+//  Bridge guard - every call goes through here so a missing bridge
+//  surfaces as a comprehensible error instead of a `Cannot read properties
+//  of undefined` deep in the call site.
+// ---------------------------------------------------------------------------
+
+function requireElectron(): YoinkApi {
+  if (typeof window === "undefined" || !window.yoink) {
+    throw new Error(
+      "Yoink Electron bridge not available - this build requires running inside the Electron host."
+    );
+  }
+  return window.yoink;
+}
 
 // ---------------------------------------------------------------------------
-//  Public API - what pages import. Each function chooses IPC or fetch.
+//  Public API - what pages import.
 // ---------------------------------------------------------------------------
 
 export async function getInfo(url: string): Promise<VideoInfo> {
-  if (isElectron()) return window.yoink!.getInfo(url);
-  const res = await fetch(`/api/info?url=${encodeURIComponent(url)}`);
-  if (!res.ok) throw new Error("Could not fetch info");
-  return res.json();
+  return requireElectron().getInfo(url);
 }
 
 export async function getFormats(url: string): Promise<Format[]> {
-  if (isElectron()) return window.yoink!.getFormats(url);
-  const res = await fetch(`/api/formats?url=${encodeURIComponent(url)}`);
-  if (!res.ok) throw new Error("Could not fetch formats");
-  const { formats } = await res.json();
-  return formats;
+  return requireElectron().getFormats(url);
 }
 
 export async function getHistory(): Promise<HistoryEntry[]> {
-  if (isElectron()) return window.yoink!.getHistory();
-  const res = await fetch("/api/history");
-  return res.json();
+  return requireElectron().getHistory();
 }
 
 export async function addHistory(entry: HistoryEntry): Promise<void> {
-  if (isElectron()) return window.yoink!.addHistory(entry);
-  await fetch("/api/history", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(entry),
-  });
+  return requireElectron().addHistory(entry);
 }
 
 export async function clearHistory(): Promise<void> {
-  if (isElectron()) return window.yoink!.clearHistory();
-  await fetch("/api/history", { method: "DELETE" });
+  return requireElectron().clearHistory();
 }
 
 export async function getSettings(): Promise<Settings> {
-  if (isElectron()) return window.yoink!.getSettings();
-  const res = await fetch("/api/settings");
-  return res.json();
+  return requireElectron().getSettings();
 }
 
 export async function saveSettings(s: Partial<Settings>): Promise<void> {
-  if (isElectron()) return window.yoink!.saveSettings(s);
-  await fetch("/api/settings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(s),
-  });
+  return requireElectron().saveSettings(s);
 }
 
 export async function pickFolder(): Promise<string | null> {
-  if (isElectron()) return window.yoink!.pickFolder();
-  const res = await fetch("/api/pick-folder", { method: "POST" });
-  const { path } = await res.json();
-  return path ?? null;
+  return requireElectron().pickFolder();
 }
 
 export async function openFolder(path: string): Promise<void> {
-  if (isElectron()) return window.yoink!.openFolder(path);
-  await fetch("/api/open-folder", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
-  });
+  return requireElectron().openFolder(path);
 }
 
 export async function checkYtdlpUpdate() {
-  if (isElectron()) return window.yoink!.checkYtdlpUpdate();
-  const res = await fetch("/api/check-update");
-  return res.json();
+  return requireElectron().checkYtdlpUpdate();
 }
 
 /**
  * Returns the URL the renderer should use to load a local file in
- * <video src=...>. In Electron we use a custom protocol; in Next.js
- * dev we use the local-file API route.
+ * <video src=...>. The Electron main process registers a `yoink-file://`
+ * protocol handler that streams the bytes back to the renderer.
  */
 export function localFileUrl(absolutePath: string): string {
-  if (isElectron()) return window.yoink!.localFileUrl(absolutePath);
-  return `/api/local-file?path=${encodeURIComponent(absolutePath)}`;
-}
-
-/**
- * Generic helper to consume a Server-Sent-Events stream from a Next.js
- * /api route and fan it out to a callback. Used by the fetch fallback
- * for download/trim/cut/audio.
- */
-async function consumeSseStream(
-  res: Response,
-  onEvent: (e: ProgressEvent) => void
-): Promise<void> {
-  if (!res.body) throw new Error("No stream body");
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const events = buf.split("\n\n");
-    buf = events.pop() ?? "";
-    for (const ev of events) {
-      const line = ev.split("\n").find((l) => l.startsWith("data: "));
-      if (!line) continue;
-      try {
-        onEvent(JSON.parse(line.slice(6)));
-      } catch {
-        /* swallow malformed events */
-      }
-    }
-  }
+  return requireElectron().localFileUrl(absolutePath);
 }
 
 export async function trim(req: TrimRequest, onEvent: (e: ProgressEvent) => void): Promise<void> {
-  if (isElectron()) return window.yoink!.trim(req, onEvent);
-  const res = await fetch("/api/trim", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error("Trim failed");
-  await consumeSseStream(res, onEvent);
+  return requireElectron().trim(req, onEvent);
 }
 
 export async function cut(req: CutRequest, onEvent: (e: ProgressEvent) => void): Promise<void> {
-  if (isElectron()) return window.yoink!.cut(req, onEvent);
-  const res = await fetch("/api/cut", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error("Cut failed");
-  await consumeSseStream(res, onEvent);
+  return requireElectron().cut(req, onEvent);
 }
 
 export async function trimAudio(
   req: AudioTrimRequest,
   onEvent: (e: ProgressEvent) => void
 ): Promise<void> {
-  if (isElectron()) return window.yoink!.trimAudio(req, onEvent);
-  const res = await fetch("/api/trim-audio", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error("Audio trim failed");
-  await consumeSseStream(res, onEvent);
+  return requireElectron().trimAudio(req, onEvent);
 }
 
 /**
  * Start a download. Returns the download id (used to cancel).
- *
- * Two implementations:
- *   Electron: window.yoink.startDownload — IPC handler streams events
- *             on a unique channel while running yt-dlp.
- *   Next.js dev: POST /api/download → returns { id }; then opens an SSE
- *             stream on /api/progress?id=<id> to receive updates.
- *             The two-step shape (mirrors the original API) keeps the
- *             dev-mode page code unchanged while the Electron version
- *             collapses it into one call.
+ * The IPC handler streams events on a unique channel while running yt-dlp.
  */
 export async function startDownload(
   req: DownloadRequest,
   onEvent: (e: ProgressEvent) => void
 ): Promise<string> {
-  if (isElectron()) return window.yoink!.startDownload(req, onEvent);
-
-  const res = await fetch("/api/download", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) {
-    const { error } = (await res.json().catch(() => ({ error: "Download failed" }))) as { error?: string };
-    throw new Error(error || "Download failed");
-  }
-  const { id } = (await res.json()) as { id: string };
-
-  // Don't await the SSE stream - return the id immediately like the
-  // Electron version does. Caller is responsible for listening to events.
-  void (async () => {
-    try {
-      const progressRes = await fetch(`/api/progress?id=${encodeURIComponent(id)}`);
-      if (progressRes.ok) await consumeSseStream(progressRes, onEvent);
-    } catch (err) {
-      onEvent({ type: "error", message: (err as Error).message });
-    }
-  })();
-
-  return id;
+  return requireElectron().startDownload(req, onEvent);
 }
 
 export async function cancelDownload(id: string): Promise<void> {
-  if (isElectron()) return window.yoink!.cancelDownload(id);
-  await fetch("/api/cancel", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
-  });
+  return requireElectron().cancelDownload(id);
 }
 
 /**
@@ -343,11 +227,5 @@ export async function cancelDownload(id: string): Promise<void> {
  * to `onLog`. Resolves when the update process exits.
  */
 export async function updateYtdlp(onLog: (line: string) => void): Promise<void> {
-  if (isElectron()) return window.yoink!.updateYtdlp(onLog);
-  const res = await fetch("/api/update-ytdlp");
-  if (!res.ok || !res.body) throw new Error("Update failed");
-  await consumeSseStream(res, (e) => {
-    if (e.type === "log") onLog(e.text);
-    // done/error events handled by the stream completion in the page
-  });
+  return requireElectron().updateYtdlp(onLog);
 }

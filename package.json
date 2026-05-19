@@ -1,7 +1,9 @@
 {
   "name": "yoink",
-  "version": "3.0.0-pre",
+  "version": "3.0.0",
   "private": true,
+  "description": "A clean, local GUI for yt-dlp.",
+  "author": "The Guy",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "next dev",

@@ -20,7 +20,6 @@ Also includes a [**browser extension**](extension/) (Chrome / Firefox / Edge / B
 - **Speed limiter** — cap download speed
 - **yt-dlp updater** — update yt-dlp from within the UI with a progress indicator
 - **Themes** — 6 themes: Slate, Terminal, Glass, Minimal, Neon Noir, Brutalist
-- **Portable build** — ships as a self-contained Windows executable
 
 | Downloading | History | Settings |
 |---|---|---|
@@ -53,31 +52,26 @@ npm install
 npm run dev
 ```
 
-Then open [http://localhost:3000](http://localhost:3000) — or use `launch.cmd` to open it as a standalone app window.
+Then open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## Distributions
+## Installing
 
-Three flavors, pick whichever fits:
+Download `Yoink-Setup-x.y.z.exe` from the [latest release](https://github.com/HesNotTheGuy/Yoink/releases/latest). Run the installer — it's per-user by default (no admin needed), creates a Start Menu shortcut, and shows up in Add/Remove Programs.
 
-| Build | Description | Best for |
-|---|---|---|
-| **Installer (.exe)** | Traditional Windows installer. Adds Yoink to Start Menu so it shows up in Windows Search, registers in Add/Remove Programs, optional desktop shortcut. | Most users |
-| **Portable Full (.zip)** | Self-contained folder with everything (Node.js, ffmpeg, yt-dlp). Just unzip and run. | USB-stick / no admin |
-| **Portable Standard (.zip)** | Same as Full but ships without yt-dlp.exe (you supply it). Smaller download. | Already have yt-dlp |
+Companion downloads on the same release page:
+- `Yoink-Extension-x.y.z.zip` — browser extension for Chrome / Firefox / Edge / Brave
+- `Yoink-Premiere-Plugin-x.y.z.zip` — Adobe Premiere Pro panel
 
 ### Building from source
 
-All three are produced by `build-portable.ps1`:
-
-```powershell
-.\build-portable.ps1                # standard portable zip
-.\build-portable.ps1 -BundleYtdlp   # full portable zip (with yt-dlp)
-.\build-portable.ps1 -Installer     # installer .exe (implies -BundleYtdlp)
+```bash
+npm install
+npm run build:electron
 ```
 
-The installer build uses [Inno Setup](https://jrsoftware.org/isdl.php) — if it's not installed the script will offer to download and silently install it for you.
+The installer is written to `dist/Yoink-Setup-x.y.z.exe`.
 
 ---
 

@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import type { Settings } from "@/app/api/settings/route";
+import type { Settings } from "@/lib/types";
 
 type HandlerFn = (event: unknown, ...args: unknown[]) => Promise<unknown> | unknown;
 

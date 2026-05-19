@@ -13,7 +13,7 @@
 
 import type { IpcMain } from "electron";
 import { readSettings, writeSettings } from "./_data";
-import type { Settings } from "@/app/api/settings/route";
+import type { Settings } from "@/lib/types";
 
 export function register(ipcMain: IpcMain): void {
   ipcMain.handle("settings:get", async (): Promise<Settings> => {

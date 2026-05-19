@@ -21,9 +21,7 @@
     "../lib/themes.ts",
     "../lib/ytdlp.ts",
     "../lib/ffmpeg.ts",
-    "../lib/data.ts",
     "../lib/api-client.ts",
-    "../app/api/settings/route.ts",
-    "../app/api/formats/route.ts"
+    "../lib/types.ts"
   ]
 }

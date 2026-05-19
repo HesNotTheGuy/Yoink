@@ -1,0 +1,36 @@
+appId: com.yoink.app
+productName: Yoink
+copyright: Public domain (Unlicense)
+directories:
+  output: dist
+files:
+  - dist-electron/**/*
+  - out/**/*
+  - yoink.ico
+  - package.json
+extraResources:
+  - from: yoink.ico
+    to: yoink.ico
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: yoink.ico
+  artifactName: Yoink-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Yoink
+  installerIcon: yoink.ico
+  uninstallerIcon: yoink.ico
+  uninstallDisplayName: Yoink
+  deleteAppDataOnUninstall: false
+  artifactName: Yoink-Setup-${version}.${ext}
