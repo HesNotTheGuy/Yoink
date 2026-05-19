@@ -285,3 +285,69 @@ export async function trimAudio(
   if (!res.ok) throw new Error("Audio trim failed");
   await consumeSseStream(res, onEvent);
 }
+
+/**
+ * Start a download. Returns the download id (used to cancel).
+ *
+ * Two implementations:
+ *   Electron: window.yoink.startDownload — IPC handler streams events
+ *             on a unique channel while running yt-dlp.
+ *   Next.js dev: POST /api/download → returns { id }; then opens an SSE
+ *             stream on /api/progress?id=<id> to receive updates.
+ *             The two-step shape (mirrors the original API) keeps the
+ *             dev-mode page code unchanged while the Electron version
+ *             collapses it into one call.
+ */
+export async function startDownload(
+  req: DownloadRequest,
+  onEvent: (e: ProgressEvent) => void
+): Promise<string> {
+  if (isElectron()) return window.yoink!.startDownload(req, onEvent);
+
+  const res = await fetch("/api/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const { error } = (await res.json().catch(() => ({ error: "Download failed" }))) as { error?: string };
+    throw new Error(error || "Download failed");
+  }
+  const { id } = (await res.json()) as { id: string };
+
+  // Don't await the SSE stream - return the id immediately like the
+  // Electron version does. Caller is responsible for listening to events.
+  void (async () => {
+    try {
+      const progressRes = await fetch(`/api/progress?id=${encodeURIComponent(id)}`);
+      if (progressRes.ok) await consumeSseStream(progressRes, onEvent);
+    } catch (err) {
+      onEvent({ type: "error", message: (err as Error).message });
+    }
+  })();
+
+  return id;
+}
+
+export async function cancelDownload(id: string): Promise<void> {
+  if (isElectron()) return window.yoink!.cancelDownload(id);
+  await fetch("/api/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+}
+
+/**
+ * Streaming yt-dlp updater. Each log line from `yt-dlp -U` is passed
+ * to `onLog`. Resolves when the update process exits.
+ */
+export async function updateYtdlp(onLog: (line: string) => void): Promise<void> {
+  if (isElectron()) return window.yoink!.updateYtdlp(onLog);
+  const res = await fetch("/api/update-ytdlp");
+  if (!res.ok || !res.body) throw new Error("Update failed");
+  await consumeSseStream(res, (e) => {
+    if (e.type === "log") onLog(e.text);
+    // done/error events handled by the stream completion in the page
+  });
+}

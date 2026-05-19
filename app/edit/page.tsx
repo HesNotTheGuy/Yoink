@@ -11,17 +11,13 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-
-interface HistoryEntry {
-  id: string;
-  url: string;
-  title: string;
-  thumbnail: string;
-  mode: string;
-  outputDir: string;
-  status: "done" | "error";
-  completedAt: number;
-}
+import {
+  getHistory,
+  openFolder as apiOpenFolder,
+  trim as apiTrim,
+  localFileUrl,
+  type HistoryEntry,
+} from "@/lib/api-client";
 
 function formatTime(sec: number): string {
   if (!isFinite(sec)) return "0:00";
@@ -59,9 +55,8 @@ export default function EditPage() {
 
   // Load history for the file picker
   useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((data: HistoryEntry[]) => setHistory(data.filter((h) => h.status === "done")))
+    getHistory()
+      .then((data) => setHistory(data.filter((h) => h.status === "done")))
       .catch(() => setHistory([]));
   }, []);
 
@@ -123,41 +118,21 @@ export default function EditPage() {
     setOutputPath("");
 
     try {
-      const res = await fetch("/api/trim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: file, inSec: inPt, outSec: outPt }),
-      });
-      if (!res.ok || !res.body) throw new Error("Server error");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const events = buf.split("\n\n");
-        buf = events.pop() ?? "";
-        for (const ev of events) {
-          const line = ev.split("\n").find((l) => l.startsWith("data: "));
-          if (!line) continue;
-          const msg = JSON.parse(line.slice(6));
-          if (msg.type === "start") {
-            setStatus("Trimming…");
-          } else if (msg.type === "progress") {
-            setProgress(msg.percent);
-            setStatus(`Trimming… ${msg.speed ?? ""}`.trim());
-          } else if (msg.type === "done") {
-            setProgress(100);
-            setStatus("Done");
-            setOutputPath(msg.output);
-          } else if (msg.type === "error") {
-            setError(msg.message);
-            setStatus("");
-          }
+      await apiTrim({ input: file, inSec: inPt, outSec: outPt }, (msg) => {
+        if (msg.type === "start") {
+          setStatus("Trimming…");
+        } else if (msg.type === "progress") {
+          setProgress(msg.percent);
+          setStatus(`Trimming… ${msg.speed ?? ""}`.trim());
+        } else if (msg.type === "done") {
+          setProgress(100);
+          setStatus("Done");
+          if (msg.output) setOutputPath(msg.output);
+        } else if (msg.type === "error") {
+          setError(msg.message);
+          setStatus("");
         }
-      }
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -167,11 +142,7 @@ export default function EditPage() {
 
   function openFolder(p: string) {
     const dir = p.replace(/[/\\][^/\\]+$/, "");
-    fetch("/api/open-folder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: dir }),
-    }).catch(() => {});
+    apiOpenFolder(dir).catch(() => {});
   }
 
   return (
@@ -220,7 +191,7 @@ export default function EditPage() {
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
               <video
                 ref={videoRef}
-                src={`/api/local-file?path=${encodeURIComponent(file)}`}
+                src={localFileUrl(file)}
                 controls
                 onLoadedMetadata={onLoadedMeta}
                 onTimeUpdate={onTimeUpdate}

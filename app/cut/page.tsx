@@ -10,17 +10,13 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-
-interface HistoryEntry {
-  id: string;
-  url: string;
-  title: string;
-  thumbnail: string;
-  mode: string;
-  outputDir: string;
-  status: "done" | "error";
-  completedAt: number;
-}
+import {
+  getHistory,
+  openFolder as apiOpenFolder,
+  cut as apiCut,
+  localFileUrl,
+  type HistoryEntry,
+} from "@/lib/api-client";
 
 interface Segment {
   id: string;
@@ -67,9 +63,8 @@ export default function CutPage() {
 
   // Load history for the file picker
   useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((data: HistoryEntry[]) => setHistory(data.filter((h) => h.status === "done")))
+    getHistory()
+      .then((data) => setHistory(data.filter((h) => h.status === "done")))
       .catch(() => setHistory([]));
   }, []);
 
@@ -175,43 +170,28 @@ export default function CutPage() {
       .map((s) => ({ start: s.start, end: s.end }));
 
     try {
-      const res = await fetch("/api/cut", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: file, segments: ordered }),
-      });
-      if (!res.ok || !res.body) throw new Error("Server error");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const events = buf.split("\n\n");
-        buf = events.pop() ?? "";
-        for (const ev of events) {
-          const line = ev.split("\n").find((l) => l.startsWith("data: "));
-          if (!line) continue;
-          const msg = JSON.parse(line.slice(6));
-          if (msg.type === "start") {
-            setStatus("Preparing segments…");
-          } else if (msg.type === "segment") {
-            setStatus(`Trimming segment ${msg.index + 1}/${msg.total}…`);
-          } else if (msg.type === "progress") {
-            setProgress(msg.percent);
-            setStatus("Joining segments…");
-          } else if (msg.type === "done") {
-            setProgress(100);
-            setStatus("Done");
-            setOutputPath(msg.output);
-          } else if (msg.type === "error") {
-            setError(msg.message);
-            setStatus("");
-          }
+      await apiCut({ input: file, segments: ordered }, (msg) => {
+        // The /api/cut route also emits a "segment" event that isn't in the
+        // shared ProgressEvent union — handle it via a broadened type guard.
+        const m = msg as
+          | typeof msg
+          | { type: "segment"; index: number; total: number };
+        if (m.type === "start") {
+          setStatus("Preparing segments…");
+        } else if (m.type === "segment") {
+          setStatus(`Trimming segment ${m.index + 1}/${m.total}…`);
+        } else if (m.type === "progress") {
+          setProgress(m.percent);
+          setStatus("Joining segments…");
+        } else if (m.type === "done") {
+          setProgress(100);
+          setStatus("Done");
+          if (m.output) setOutputPath(m.output);
+        } else if (m.type === "error") {
+          setError(m.message);
+          setStatus("");
         }
-      }
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -221,11 +201,7 @@ export default function CutPage() {
 
   function openFolder(p: string) {
     const dir = p.replace(/[/\\][^/\\]+$/, "");
-    fetch("/api/open-folder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: dir }),
-    }).catch(() => {});
+    apiOpenFolder(dir).catch(() => {});
   }
 
   return (
@@ -274,7 +250,7 @@ export default function CutPage() {
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
               <video
                 ref={videoRef}
-                src={`/api/local-file?path=${encodeURIComponent(file)}`}
+                src={localFileUrl(file)}
                 controls
                 onLoadedMetadata={onLoadedMeta}
                 onTimeUpdate={onTimeUpdate}

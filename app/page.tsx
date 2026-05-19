@@ -2,6 +2,22 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { THEMES, THEME_CSS, THEME_KEYS, type Theme } from "@/lib/themes";
+import {
+  getInfo,
+  getFormats,
+  getHistory,
+  addHistory as apiAddHistory,
+  clearHistory as apiClearHistory,
+  getSettings,
+  saveSettings as apiSaveSettings,
+  pickFolder as apiPickFolder,
+  openFolder as apiOpenFolder,
+  checkYtdlpUpdate,
+  startDownload as apiStartDownload,
+  cancelDownload as apiCancelDownload,
+  updateYtdlp as apiUpdateYtdlp,
+  type ProgressEvent as ApiProgressEvent,
+} from "@/lib/api-client";
 
 const GUI_VERSION = "2.2.3";
 
@@ -105,7 +121,7 @@ export default function Home() {
   // Downloads
   const [downloads, setDownloads] = useState<ActiveDownload[]>([]);
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
-  const eventSources = useRef<Map<string, EventSource>>(new Map());
+  const activeDownloadIds = useRef<Set<string>>(new Set());
 
   // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -158,31 +174,34 @@ export default function Home() {
 
   // ── Load settings on mount ──────────────────────────────────────────────
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((s: Settings) => {
-        setOutputDir(s.outputDir);
-        setMode(s.defaultMode);
-        setQuality(s.defaultQuality);
-        setEmbedMetadata(s.embedMetadata);
-        setEmbedThumbnail(s.embedThumbnail);
-        setCookiesFile(s.cookiesFile);
-        setSpeedLimit(s.speedLimit ?? "");
-        setDraftSettings({ ...DEFAULT_SETTINGS, ...s });
+    getSettings()
+      .then((s) => {
+        const settings = s as unknown as Settings;
+        setOutputDir(settings.outputDir);
+        setMode(settings.defaultMode);
+        setQuality(settings.defaultQuality);
+        setEmbedMetadata(settings.embedMetadata);
+        setEmbedThumbnail(settings.embedThumbnail);
+        setCookiesFile(settings.cookiesFile);
+        setSpeedLimit(settings.speedLimit ?? "");
+        setDraftSettings({ ...DEFAULT_SETTINGS, ...settings });
       })
       .catch(() => {});
   }, []);
 
   // ── Load history on mount ───────────────────────────────────────────────
   useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((data: HistoryEntry[]) => setHistory(data))
+    getHistory()
+      .then((data) => setHistory(data as HistoryEntry[]))
       .catch(() => {});
   }, []);
 
   // ── Heartbeat ───────────────────────────────────────────────────────────
+  // Only relevant in the Next.js dev/standalone server build, where the
+  // /api/ping route auto-shuts down the server after 10s of silence.
+  // In Electron there is no Next.js server, so the heartbeat is skipped.
   useEffect(() => {
+    if (typeof window !== "undefined" && window.yoink) return;
     const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
     ping();
     const id = setInterval(ping, 5_000);
@@ -199,8 +218,7 @@ export default function Home() {
 
   // ── Check for yt-dlp updates on startup ────────────────────────────────
   useEffect(() => {
-    fetch("/api/check-update")
-      .then((r) => r.json())
+    checkYtdlpUpdate()
       .then(({ updateAvailable: ua, current }) => {
         setUpdateAvailable(ua);
         if (current) setYtdlpVersion(current);
@@ -246,25 +264,21 @@ export default function Home() {
       setInfoError(false);
       setFormats([]);
       setSelectedFormat("bestvideo+bestaudio/best");
-      try {
-        const [infoRes, fmtRes] = await Promise.all([
-          fetch(`/api/info?url=${encodeURIComponent(url.trim())}`),
-          fetch(`/api/formats?url=${encodeURIComponent(url.trim())}`),
-        ]);
-        const [infoData, fmtData] = await Promise.all([infoRes.json(), fmtRes.json()]);
-        if (infoData.error) {
-          setVideoInfo(null);
-          setInfoError(true);
-        } else {
-          setVideoInfo(infoData);
-        }
-        if (!fmtData.error) setFormats(fmtData.formats ?? []);
-      } catch {
+      const trimmed = url.trim();
+      const [infoResult, fmtResult] = await Promise.allSettled([
+        getInfo(trimmed),
+        getFormats(trimmed),
+      ]);
+      if (infoResult.status === "fulfilled") {
+        setVideoInfo(infoResult.value);
+      } else {
         setVideoInfo(null);
         setInfoError(true);
-      } finally {
-        setInfoLoading(false);
       }
+      if (fmtResult.status === "fulfilled") {
+        setFormats(fmtResult.value ?? []);
+      }
+      setInfoLoading(false);
     }, 800);
   }, [url, batchMode]);
 
@@ -293,97 +307,90 @@ export default function Home() {
 
   const addToHistory = useCallback((entry: HistoryEntry) => {
     setHistory((prev) => [entry, ...prev.slice(0, 99)]);
-    fetch("/api/history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(entry),
-    }).catch(() => {});
+    apiAddHistory(entry).catch(() => {});
   }, []);
 
   // ── Start single download ────────────────────────────────────────────────
   const startSingleDownload = useCallback(
     async (dlUrl: string) => {
       if (!dlUrl.trim() || !outputDir.trim()) return;
-      const res = await fetch("/api/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: dlUrl.trim(),
-          mode,
-          quality,
-          formatId: selectedFormat,
-          outputDir: outputDir.trim(),
-          thumbnail: videoInfo?.thumbnail ?? "",
-          embedMetadata,
-          embedThumbnail,
-          cookiesFile: cookiesFile.trim(),
-          speedLimit: speedLimit.trim(),
-        }),
-      });
-      const { id, error } = await res.json();
-      if (error || !id) return;
+
+      let id: string;
+      const trimmedUrl = dlUrl.trim();
+      const trimmedDir = outputDir.trim();
+      const initialTitle = videoInfo?.title || trimmedUrl;
+      const initialThumb = videoInfo?.thumbnail ?? "";
+
+      const handleEvent = (msg: ApiProgressEvent) => {
+        if (msg.type === "progress") {
+          updateDownload(id, { status: "downloading", progress: msg.percent, speed: msg.speed ?? "", eta: msg.eta ?? "" });
+        } else if (msg.type === "title") {
+          updateDownload(id, { title: msg.title });
+        } else if (msg.type === "log") {
+          appendLog(id, msg.text);
+        } else if (msg.type === "done") {
+          updateDownload(id, { status: "done", progress: 100, speed: "", eta: "" });
+          activeDownloadIds.current.delete(id);
+          setDownloads((prev) => {
+            const found = prev.find((d) => d.id === id);
+            if (found) {
+              notify("Download complete", found.title || trimmedUrl);
+              addToast(`Downloaded: ${found.title || trimmedUrl}`, "success");
+              addToHistory({ id, url: trimmedUrl, title: found.title, thumbnail: found.thumbnail, mode, outputDir: trimmedDir, status: "done", completedAt: Date.now() });
+            }
+            return prev;
+          });
+        } else if (msg.type === "error") {
+          updateDownload(id, { status: "error", error: msg.message });
+          activeDownloadIds.current.delete(id);
+          setDownloads((prev) => {
+            const found = prev.find((d) => d.id === id);
+            if (found) {
+              addToHistory({ id, url: trimmedUrl, title: found.title, thumbnail: found.thumbnail, mode, outputDir: trimmedDir, status: "error", completedAt: Date.now(), error: msg.message });
+            }
+            return prev;
+          });
+        }
+      };
+
+      try {
+        id = await apiStartDownload(
+          {
+            url: trimmedUrl,
+            mode,
+            quality,
+            formatId: selectedFormat,
+            outputDir: trimmedDir,
+            thumbnail: initialThumb,
+            embedMetadata,
+            embedThumbnail,
+            cookiesFile: cookiesFile.trim(),
+            speedLimit: speedLimit.trim(),
+          },
+          handleEvent,
+        );
+      } catch {
+        return;
+      }
+      if (!id) return;
+
+      activeDownloadIds.current.add(id);
 
       const dl: ActiveDownload = {
         id,
-        url: dlUrl.trim(),
+        url: trimmedUrl,
         mode,
-        title: videoInfo?.title || dlUrl.trim(),
-        thumbnail: videoInfo?.thumbnail ?? "",
+        title: initialTitle,
+        thumbnail: initialThumb,
         status: "pending",
         progress: 0,
         speed: "",
         eta: "",
         error: "",
         logs: [],
-        outputDir: outputDir.trim(),
+        outputDir: trimmedDir,
       };
       setDownloads((prev) => [dl, ...prev]);
-
-      const es = new EventSource(`/api/progress?id=${id}`);
-      eventSources.current.set(id, es);
-
-      es.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg.type === "progress") {
-            updateDownload(id, { status: "downloading", progress: msg.progress, speed: msg.speed, eta: msg.eta });
-          } else if (msg.type === "title") {
-            updateDownload(id, { title: msg.title });
-          } else if (msg.type === "log") {
-            appendLog(id, msg.text);
-          } else if (msg.type === "done") {
-            updateDownload(id, { status: "done", progress: 100, speed: "", eta: "" });
-            es.close();
-            eventSources.current.delete(id);
-            setDownloads((prev) => {
-              const found = prev.find((d) => d.id === id);
-              if (found) {
-                notify("Download complete", found.title || dlUrl.trim());
-                addToast(`Downloaded: ${found.title || dlUrl.trim()}`, "success");
-                addToHistory({ id, url: dlUrl.trim(), title: found.title, thumbnail: found.thumbnail, mode, outputDir: outputDir.trim(), status: "done", completedAt: Date.now() });
-              }
-              return prev;
-            });
-          } else if (msg.type === "error") {
-            updateDownload(id, { status: "error", error: msg.message });
-            es.close();
-            eventSources.current.delete(id);
-            setDownloads((prev) => {
-              const found = prev.find((d) => d.id === id);
-              if (found) {
-                addToHistory({ id, url: dlUrl.trim(), title: found.title, thumbnail: found.thumbnail, mode, outputDir: outputDir.trim(), status: "error", completedAt: Date.now(), error: msg.message });
-              }
-              return prev;
-            });
-          }
-        } catch { /* ignore */ }
-      };
-
-      es.onerror = () => {
-        updateDownload(id, { status: "error", error: "Connection lost" });
-        es.close();
-        eventSources.current.delete(id);
-      };
     },
     [mode, quality, selectedFormat, outputDir, videoInfo, embedMetadata, embedThumbnail, cookiesFile, speedLimit, updateDownload, appendLog, addToast, addToHistory]
   );
@@ -407,13 +414,8 @@ export default function Home() {
 
   // ── Cancel download ──────────────────────────────────────────────────────
   const cancelDownload = async (id: string) => {
-    await fetch("/api/cancel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    }).catch(() => {});
-    const es = eventSources.current.get(id);
-    if (es) { es.close(); eventSources.current.delete(id); }
+    await apiCancelDownload(id).catch(() => {});
+    activeDownloadIds.current.delete(id);
     updateDownload(id, { status: "error", error: "Cancelled" });
   };
 
@@ -425,57 +427,50 @@ export default function Home() {
 
   // ── Open folder in Explorer ──────────────────────────────────────────────
   const openFolder = (dir: string) => {
-    fetch("/api/open-folder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: dir }),
-    }).catch(() => {});
+    apiOpenFolder(dir).catch(() => {});
   };
 
   // ── Update yt-dlp ────────────────────────────────────────────────────────
   const updateYtdlp = () => {
     setUpdating(true);
     setUpdateState({ fromVersion: "", toVersion: "", status: "checking", error: "" });
-    const es = new EventSource("/api/update-ytdlp");
-    es.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "log") {
-          const text: string = msg.text ?? "";
-          const currentMatch = text.match(/Current version:\s*(\S+)/i);
-          const latestMatch = text.match(/Latest version:\s*(\S+)/i);
-          const updatingMatch = text.match(/Updating to\s+(\S+)/i);
-          const errorMatch = text.match(/^ERROR:\s*(.+)/i);
-          const upToDate = text.includes("is up to date");
 
-          if (currentMatch) setUpdateState((p) => ({ ...p, fromVersion: currentMatch[1] }));
-          if (latestMatch) setUpdateState((p) => ({ ...p, toVersion: latestMatch[1] }));
-          if (updatingMatch) setUpdateState((p) => ({ ...p, status: "downloading", toVersion: p.toVersion || updatingMatch[1] }));
-          if (errorMatch) setUpdateState((p) => ({ ...p, status: "error", error: errorMatch[1] }));
-          if (upToDate) {
-            setUpdateAvailable(false);
-            setUpdateState((p) => ({ ...p, status: "up-to-date" }));
-            setTimeout(() => setUpdateState({ fromVersion: "", toVersion: "", status: "idle", error: "" }), 4000);
-          }
-        } else if (msg.type === "done") {
-          setUpdating(false);
-          setUpdateAvailable(false);
-          setUpdateState((p) => ({ ...p, status: p.status === "error" ? "error" : "done" }));
-          if (msg.message !== "yt-dlp is up to date!") addToast("yt-dlp updated successfully", "success");
-          es.close();
-          setTimeout(() => setUpdateState({ fromVersion: "", toVersion: "", status: "idle", error: "" }), 4000);
-        } else if (msg.type === "error") {
-          setUpdating(false);
-          setUpdateState((p) => ({ ...p, status: "error", error: msg.message ?? "Update failed" }));
-          es.close();
-        }
-      } catch { /* ignore */ }
-    };
-    es.onerror = () => {
-      setUpdating(false);
-      setUpdateState((p) => ({ ...p, status: "error", error: "Connection lost" }));
-      es.close();
-    };
+    let sawUpToDate = false;
+    let sawError = false;
+
+    apiUpdateYtdlp((text: string) => {
+      const currentMatch = text.match(/Current version:\s*(\S+)/i);
+      const latestMatch = text.match(/Latest version:\s*(\S+)/i);
+      const updatingMatch = text.match(/Updating to\s+(\S+)/i);
+      const errorMatch = text.match(/^ERROR:\s*(.+)/i);
+      const upToDate = text.includes("is up to date");
+
+      if (currentMatch) setUpdateState((p) => ({ ...p, fromVersion: currentMatch[1] }));
+      if (latestMatch) setUpdateState((p) => ({ ...p, toVersion: latestMatch[1] }));
+      if (updatingMatch) setUpdateState((p) => ({ ...p, status: "downloading", toVersion: p.toVersion || updatingMatch[1] }));
+      if (errorMatch) {
+        sawError = true;
+        setUpdateState((p) => ({ ...p, status: "error", error: errorMatch[1] }));
+      }
+      if (upToDate) {
+        sawUpToDate = true;
+        setUpdateAvailable(false);
+        setUpdateState((p) => ({ ...p, status: "up-to-date" }));
+        setTimeout(() => setUpdateState({ fromVersion: "", toVersion: "", status: "idle", error: "" }), 4000);
+      }
+    })
+      .then(() => {
+        setUpdating(false);
+        if (sawError) return;
+        setUpdateAvailable(false);
+        setUpdateState((p) => ({ ...p, status: p.status === "error" ? "error" : "done" }));
+        if (!sawUpToDate) addToast("yt-dlp updated successfully", "success");
+        setTimeout(() => setUpdateState({ fromVersion: "", toVersion: "", status: "idle", error: "" }), 4000);
+      })
+      .catch((err: Error) => {
+        setUpdating(false);
+        setUpdateState((p) => ({ ...p, status: "error", error: err?.message ?? "Update failed" }));
+      });
   };
 
   const toggleLogs = (id: string) => {
@@ -488,11 +483,7 @@ export default function Home() {
 
   // ── Save settings ────────────────────────────────────────────────────────
   const saveSettings = async () => {
-    await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(draftSettings),
-    }).catch(() => {});
+    await apiSaveSettings(draftSettings as Parameters<typeof apiSaveSettings>[0]).catch(() => {});
     setOutputDir(draftSettings.outputDir);
     setMode(draftSettings.defaultMode);
     setQuality(draftSettings.defaultQuality);
@@ -507,15 +498,14 @@ export default function Home() {
   // ── Pick folder via Windows dialog ───────────────────────────────────────
   const pickFolder = async (onPick: (path: string) => void) => {
     try {
-      const res = await fetch("/api/pick-folder");
-      const { path } = await res.json();
+      const path = await apiPickFolder();
       if (path) onPick(path);
     } catch { /* ignore */ }
   };
 
   // ── Clear history ─────────────────────────────────────────────────────────
   const clearHistory = async () => {
-    await fetch("/api/history", { method: "DELETE" }).catch(() => {});
+    await apiClearHistory().catch(() => {});
     setHistory([]);
   };
 

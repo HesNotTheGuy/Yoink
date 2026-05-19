@@ -4,24 +4,21 @@
  * Yoink Audio Clipper — Phase 3: single-segment audio trim with waveform.
  *
  * Loads any downloaded file (audio or video — video is treated as audio-only)
- * via /api/local-file, decodes it client-side with the Web Audio API, draws
- * a waveform on a canvas, and lets the user mark in/out points before asking
- * the server to ffmpeg-encode the segment in mp3/wav/flac/aac.
+ * via the api-client localFileUrl helper, decodes it client-side with the
+ * Web Audio API, draws a waveform on a canvas, and lets the user mark in/out
+ * points before asking the server to ffmpeg-encode the segment in mp3/wav/flac/aac.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-
-interface HistoryEntry {
-  id: string;
-  url: string;
-  title: string;
-  thumbnail: string;
-  mode: string;
-  outputDir: string;
-  status: "done" | "error";
-  completedAt: number;
-}
+import {
+  getHistory,
+  openFolder as apiOpenFolder,
+  trimAudio,
+  localFileUrl,
+  type HistoryEntry,
+  type AudioTrimRequest,
+} from "@/lib/api-client";
 
 type AudioCodec = "mp3" | "wav" | "flac" | "aac";
 
@@ -66,9 +63,8 @@ export default function AudioPage() {
 
   // Load history for the file picker
   useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((data: HistoryEntry[]) => setHistory(data.filter((h) => h.status === "done")))
+    getHistory()
+      .then((data) => setHistory(data.filter((h) => h.status === "done")))
       .catch(() => setHistory([]));
   }, []);
 
@@ -88,7 +84,7 @@ export default function AudioPage() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/local-file?path=${encodeURIComponent(file)}`);
+        const res = await fetch(localFileUrl(file));
         if (!res.ok) throw new Error(`Failed to load file (${res.status})`);
         const buf = await res.arrayBuffer();
         if (aborted) return;
@@ -292,41 +288,22 @@ export default function AudioPage() {
     setOutputPath("");
 
     try {
-      const res = await fetch("/api/trim-audio", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: file, inSec: inPt, outSec: outPt, codec }),
-      });
-      if (!res.ok || !res.body) throw new Error("Server error");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const events = buf.split("\n\n");
-        buf = events.pop() ?? "";
-        for (const ev of events) {
-          const line = ev.split("\n").find((l) => l.startsWith("data: "));
-          if (!line) continue;
-          const msg = JSON.parse(line.slice(6));
-          if (msg.type === "start") {
-            setStatus("Encoding…");
-          } else if (msg.type === "progress") {
-            setProgress(msg.percent);
-            setStatus(`Encoding… ${msg.speed ?? ""}`.trim());
-          } else if (msg.type === "done") {
-            setProgress(100);
-            setStatus("Done");
-            setOutputPath(msg.output);
-          } else if (msg.type === "error") {
-            setError(msg.message);
-            setStatus("");
-          }
+      const req: AudioTrimRequest = { input: file, inSec: inPt, outSec: outPt, codec };
+      await trimAudio(req, (msg) => {
+        if (msg.type === "start") {
+          setStatus("Encoding…");
+        } else if (msg.type === "progress") {
+          setProgress(msg.percent);
+          setStatus(`Encoding… ${msg.speed ?? ""}`.trim());
+        } else if (msg.type === "done") {
+          setProgress(100);
+          setStatus("Done");
+          if (msg.output) setOutputPath(msg.output);
+        } else if (msg.type === "error") {
+          setError(msg.message);
+          setStatus("");
         }
-      }
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -336,11 +313,7 @@ export default function AudioPage() {
 
   function openFolder(p: string) {
     const dir = p.replace(/[/\\][^/\\]+$/, "");
-    fetch("/api/open-folder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: dir }),
-    }).catch(() => {});
+    apiOpenFolder(dir).catch(() => {});
   }
 
   return (
@@ -395,7 +368,7 @@ export default function AudioPage() {
               />
               <audio
                 ref={audioRef}
-                src={`/api/local-file?path=${encodeURIComponent(file)}`}
+                src={localFileUrl(file)}
                 onLoadedMetadata={onLoadedMeta}
                 onTimeUpdate={onTimeUpdate}
                 onPlay={() => setPlaying(true)}
