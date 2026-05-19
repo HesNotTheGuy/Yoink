@@ -5,8 +5,14 @@ node_modules/
 .next/
 tsconfig.tsbuildinfo
 
-# Built distributions (rebuild with build-portable.ps1)
+# Built distributions
 dist/
+
+# Electron main/preload bundles (regenerated via electron/build.mjs)
+dist-electron/
+
+# Next.js static export (regenerated via next build)
+out/
 
 # Runtime data (machine-specific settings & history)
 data/

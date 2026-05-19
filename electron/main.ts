@@ -58,6 +58,11 @@ function getDataDir(): string {
 }
 
 async function createWindow() {
+  // Repo root in dev (when compiled to dist-electron/electron/main.js, two
+  // levels up is the project root); same path in packaged builds because
+  // app.getAppPath() points at the asar root.
+  const appRoot = app.getAppPath();
+
   const win = new BrowserWindow({
     width: 1100,
     height: 800,
@@ -66,7 +71,7 @@ async function createWindow() {
     backgroundColor: "#070b14", // matches the Slate theme so no white flash
     show: false,
     title: "Yoink",
-    icon: path.join(__dirname, "..", "yoink.ico"),
+    icon: path.join(appRoot, "yoink.ico"),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -88,8 +93,8 @@ async function createWindow() {
     await win.loadURL(DEV_URL);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
-    // Production: Next.js static export goes in out/
-    const indexPath = path.join(__dirname, "..", "out", "index.html");
+    // Production: Next.js static export goes in out/ at the app root
+    const indexPath = path.join(appRoot, "out", "index.html");
     await win.loadFile(indexPath);
   }
 }

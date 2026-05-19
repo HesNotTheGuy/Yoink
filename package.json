@@ -2,12 +2,12 @@
   "name": "yoink",
   "version": "3.0.0-pre",
   "private": true,
-  "main": "dist-electron/electron/main.js",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "next dev",
-    "dev:electron": "concurrently --kill-others -n next,electron -c blue,magenta \"next dev\" \"wait-on http://localhost:3000 && tsc -p electron && cross-env NODE_ENV=development electron dist-electron/electron/main.js\"",
+    "dev:electron": "concurrently --kill-others -n next,electron -c blue,magenta \"next dev\" \"wait-on http://localhost:3000 && node electron/build.mjs && cross-env NODE_ENV=development electron dist-electron/main.js\"",
     "build": "next build",
-    "build:electron": "tsc -p electron && next build && electron-builder",
+    "build:electron": "node electron/build.mjs && next build && electron-builder",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -29,9 +29,11 @@
     "cross-env": "^7.0.3",
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
+    "esbuild": "^0.28.0",
     "postcss": "^8",
     "puppeteer": "^24.40.0",
     "tailwindcss": "^4",
+    "tsc-alias": "^1.8.17",
     "typescript": "^5",
     "vitest": "^2.1.9",
     "wait-on": "^8.0.5"
