@@ -340,14 +340,17 @@ $startServerCmd += "SET HOSTNAME=127.0.0.1`r`n"
 $startServerCmd += "`"%APPDIR%node\node.exe`" `"%APPDIR%server\server.js`"`r`n"
 [System.IO.File]::WriteAllText((Join-Path $AppDir "start-server.cmd"), $startServerCmd)
 
-# start-server.vbs  -- hides the CMD window, forwards PORT env var
-$startServerVbs  = "Set wsh = CreateObject(`"WScript.Shell`")`r`n"
-$startServerVbs += "Dim appDir`r`n"
-$startServerVbs += "appDir = Left(WScript.ScriptFullName, InStrRev(WScript.ScriptFullName, `"\`"))`r`n"
-$startServerVbs += "Dim port : port = wsh.Environment(`"Process`")(`"PORT`")`r`n"
-$startServerVbs += "Dim cmd : cmd = `"cmd /c `"`"`" & appDir & `"start-server.cmd`"`"`r`n"
-$startServerVbs += "If port <> `"`" Then cmd = `"cmd /c SET PORT=`" & port & `" && `"`"`" & appDir & `"start-server.cmd`"`"`r`n"
-$startServerVbs += "wsh.Run cmd, 0, False`r`n"
+# start-server.vbs  --  hides the CMD window, forwards PORT env var.
+# Single-quoted here-string preserves the literal VBS source - no PS escaping.
+$startServerVbs = @'
+Set wsh = CreateObject("WScript.Shell")
+Dim appDir
+appDir = Left(WScript.ScriptFullName, InStrRev(WScript.ScriptFullName, "\"))
+Dim port : port = wsh.Environment("Process")("PORT")
+Dim cmd : cmd = "cmd /c """ & appDir & "start-server.cmd"""
+If port <> "" Then cmd = "cmd /c SET PORT=" & port & " && """ & appDir & "start-server.cmd"""
+wsh.Run cmd, 0, False
+'@
 [System.IO.File]::WriteAllText((Join-Path $AppDir "start-server.vbs"), $startServerVbs)
 
 # launch.cmd  -- user double-clicks this
