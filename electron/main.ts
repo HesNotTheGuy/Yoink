@@ -35,6 +35,21 @@ import { register as registerFolder } from "./ipc/folder";
 const isDev = !app.isPackaged;
 const DEV_URL = "http://localhost:3000";
 
+// Register custom schemes BEFORE app is ready. The `app://` scheme serves
+// the Next.js static export so that absolute asset paths (`/_next/...`)
+// resolve correctly. file:// loading would try to read from the
+// filesystem root instead, which leaves the UI unstyled.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "app",
+    privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true },
+  },
+  {
+    scheme: "yoink-file",
+    privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true, bypassCSP: true },
+  },
+]);
+
 // Single instance lock so double-clicking the icon doesn't spawn a second
 // Yoink. The second instance just focuses the existing window.
 const gotLock = app.requestSingleInstanceLock();
@@ -93,10 +108,76 @@ async function createWindow() {
     await win.loadURL(DEV_URL);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
-    // Production: Next.js static export goes in out/ at the app root
-    const indexPath = path.join(appRoot, "out", "index.html");
-    await win.loadFile(indexPath);
+    // Production: load via the custom app:// protocol (handler below) so
+    // absolute paths like /_next/static/... resolve through our handler
+    // instead of the filesystem root.
+    await win.loadURL("app://yoink/index.html");
   }
+}
+
+/**
+ * Custom protocol: `app://yoink/<path>` serves files from the Next.js
+ * static export folder (`out/`). Required for the production build
+ * because Next.js emits absolute `/...` URLs for assets, which would
+ * 404 if we loaded the HTML via file://.
+ *
+ * Falls back to `<path>/index.html` for folder-style URLs (consistent
+ * with trailingSlash: true in next.config.ts).
+ */
+function registerAppProtocol(outDir: string) {
+  const mimeMap: Record<string, string> = {
+    ".html": "text/html; charset=utf-8",
+    ".js":   "application/javascript; charset=utf-8",
+    ".mjs":  "application/javascript; charset=utf-8",
+    ".css":  "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg":  "image/svg+xml",
+    ".png":  "image/png",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif":  "image/gif",
+    ".webp": "image/webp",
+    ".ico":  "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2":"font/woff2",
+    ".ttf":  "font/ttf",
+    ".otf":  "font/otf",
+    ".map":  "application/json",
+    ".txt":  "text/plain; charset=utf-8",
+  };
+
+  protocol.handle("app", async (request) => {
+    try {
+      const url = new URL(request.url);
+      // Strip any leading slashes and decode. URL.pathname keeps a leading /.
+      let relPath = decodeURIComponent(url.pathname).replace(/^\/+/, "");
+      if (!relPath) relPath = "index.html";
+
+      let filePath = path.join(outDir, relPath);
+
+      // If the path has no extension OR points at a directory, fall back to
+      // index.html (matches Next.js trailingSlash export shape).
+      if (!path.extname(relPath) || (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory())) {
+        filePath = path.join(filePath, "index.html");
+      }
+
+      // Block path traversal outside outDir
+      const normalized = path.normalize(filePath);
+      if (!normalized.startsWith(path.normalize(outDir))) {
+        return new Response("Forbidden", { status: 403 });
+      }
+
+      if (!fs.existsSync(normalized) || !fs.statSync(normalized).isFile()) {
+        return new Response("Not found", { status: 404 });
+      }
+
+      const data = await fs.promises.readFile(normalized);
+      const mime = mimeMap[path.extname(normalized).toLowerCase()] || "application/octet-stream";
+      return new Response(data, { headers: { "Content-Type": mime } });
+    } catch (e) {
+      return new Response(`Error: ${(e as Error).message}`, { status: 500 });
+    }
+  });
 }
 
 /**
@@ -135,6 +216,13 @@ app.whenReady().then(async () => {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
   registerYoinkFileProtocol();
+
+  // Only register app:// in production - dev mode loads from the live
+  // Next.js server at http://localhost:3000, no static export involved.
+  if (app.isPackaged) {
+    const outDir = path.join(app.getAppPath(), "out");
+    registerAppProtocol(outDir);
+  }
 
   // Register every IPC handler. New handlers added to electron/ipc/ should
   // also be imported and registered above. This file is the ONE place the
