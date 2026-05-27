@@ -25,6 +25,10 @@ export function register(ipcMain: IpcMain): void {
         uploader: (info.uploader as string) ?? (info.channel as string) ?? "",
       };
     } catch (err) {
+      // Log the underlying yt-dlp error to the main-process console so it
+      // surfaces in dev / packaged-app logs. The renderer only sees the
+      // wrapped message.
+      console.error("[info:get]", url, err);
       throw new Error(`Could not fetch info: ${(err as Error).message}`);
     }
   });

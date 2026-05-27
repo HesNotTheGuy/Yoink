@@ -47,12 +47,18 @@ export async function getYtdlpVersion(): Promise<string> {
 /**
  * Calls `yt-dlp --dump-json --no-download --no-playlist <url>` and returns
  * the parsed JSON of the first line (the video metadata). Throws on failure.
+ *
+ * maxBuffer is intentionally large: yt-dlp's JSON dump for a YouTube video
+ * routinely runs 500 KB - 2 MB once every format variant is included, and
+ * playlists / livestreams / high-format-count uploads can push 5+ MB. The
+ * Node default of 1 MB silently rejects with ERR_CHILD_PROCESS_STDIO_MAXBUFFER
+ * which surfaces in the UI as "could not load video info".
  */
-export async function dumpJson(url: string, timeout = 20_000): Promise<Record<string, unknown>> {
+export async function dumpJson(url: string, timeout = 30_000): Promise<Record<string, unknown>> {
   const { stdout } = await execFileAsync(
     findYtdlp(),
     ["--dump-json", "--no-download", "--no-playlist", url],
-    { timeout }
+    { timeout, maxBuffer: 32 * 1024 * 1024 }
   );
   return JSON.parse(stdout.trim().split("\n")[0]);
 }

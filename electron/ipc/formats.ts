@@ -30,6 +30,7 @@ export function register(ipcMain: IpcMain): void {
         format_note: f.format_note ?? "",
       }));
     } catch (err) {
+      console.error("[formats:get]", url, err);
       throw new Error(`Could not fetch formats: ${(err as Error).message}`);
     }
   });
