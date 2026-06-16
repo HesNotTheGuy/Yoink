@@ -19,6 +19,7 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { findFfmpeg, buildAudioTrimArgs, parseProgressBlock } from "@/lib/ffmpeg";
+import { activeProcs } from "./download";
 
 type AudioCodec = "mp3" | "wav" | "flac" | "aac";
 
@@ -79,6 +80,7 @@ export function register(ipcMain: IpcMain): void {
         send({ type: "start", duration, output });
 
         const proc = spawn(findFfmpeg(), args, { stdio: ["ignore", "pipe", "pipe"] });
+        activeProcs.add(proc);
         let stdoutBuf = "";
         let stderrBuf = "";
 
@@ -108,6 +110,7 @@ export function register(ipcMain: IpcMain): void {
         });
 
         proc.on("close", (code) => {
+          activeProcs.delete(proc);
           if (code === 0 && fs.existsSync(output)) {
             send({ type: "done", output });
           } else {
@@ -119,7 +122,12 @@ export function register(ipcMain: IpcMain): void {
         });
 
         proc.on("error", (err) => {
-          send({ type: "error", message: `Failed to spawn ffmpeg: ${err.message}` });
+          activeProcs.delete(proc);
+          const message =
+            (err as NodeJS.ErrnoException).code === "ENOENT"
+              ? "ffmpeg not found. Reinstall Yoink to restore it."
+              : `Failed to spawn ffmpeg: ${err.message}`;
+          send({ type: "error", message });
           resolve();
         });
       });

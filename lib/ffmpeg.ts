@@ -44,6 +44,21 @@ export function findFfmpeg(): string {
 }
 
 /**
+ * Returns true if an ffmpeg binary can be located. When findFfmpeg() returns
+ * an absolute path we check it directly; when it falls back to a bare exe name
+ * we walk PATH so callers can give a friendly message rather than an ENOENT.
+ */
+export function ffmpegExists(): boolean {
+  const resolved = findFfmpeg();
+  if (path.isAbsolute(resolved)) return fs.existsSync(resolved);
+  const pathDirs = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  for (const dir of pathDirs) {
+    if (fs.existsSync(path.join(dir, resolved))) return true;
+  }
+  return false;
+}
+
+/**
  * Returns the ffmpeg version string (the first line of `ffmpeg -version`),
  * or throws if not found.
  */

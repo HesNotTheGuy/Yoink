@@ -195,6 +195,7 @@ export default function EditPage() {
                 controls
                 onLoadedMetadata={onLoadedMeta}
                 onTimeUpdate={onTimeUpdate}
+                onError={() => setError("Could not load this file — it may have been moved or deleted.")}
                 className="w-full bg-black aspect-video"
               />
               <div className="px-3 py-2 text-xs text-zinc-500 truncate" title={file}>{file}</div>

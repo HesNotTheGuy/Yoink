@@ -32,6 +32,7 @@ import {
   secondsToTimestamp,
   parseProgressBlock,
 } from "@/lib/ffmpeg";
+import { activeProcs } from "./download";
 
 interface Segment {
   start: number;
@@ -183,6 +184,7 @@ export function register(ipcMain: IpcMain): void {
         const proc = spawn(ffmpegPath, concatArgs, {
           stdio: ["ignore", "pipe", "pipe"],
         });
+        activeProcs.add(proc);
         let stdoutBuf = "";
         let stderrBuf = "";
 
@@ -207,6 +209,7 @@ export function register(ipcMain: IpcMain): void {
         });
 
         proc.on("close", (code) => {
+          activeProcs.delete(proc);
           if (code === 0 && fs.existsSync(output)) {
             send({ type: "done", output });
           } else {
@@ -219,7 +222,12 @@ export function register(ipcMain: IpcMain): void {
         });
 
         proc.on("error", (err) => {
-          send({ type: "error", message: `Failed to spawn ffmpeg: ${err.message}` });
+          activeProcs.delete(proc);
+          const message =
+            (err as NodeJS.ErrnoException).code === "ENOENT"
+              ? "ffmpeg not found. Reinstall Yoink to restore it."
+              : `Failed to spawn ffmpeg: ${err.message}`;
+          send({ type: "error", message });
           resolve();
         });
       });
@@ -242,11 +250,13 @@ function runFfmpeg(
 ): Promise<{ success: boolean; error: string }> {
   return new Promise((resolve) => {
     const proc = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+    activeProcs.add(proc);
     let stderrBuf = "";
     proc.stderr.on("data", (chunk: Buffer) => {
       stderrBuf += chunk.toString("utf8");
     });
     proc.on("close", (code) => {
+      activeProcs.delete(proc);
       if (code === 0) {
         resolve({ success: true, error: "" });
       } else {
@@ -256,7 +266,12 @@ function runFfmpeg(
       }
     });
     proc.on("error", (err) => {
-      resolve({ success: false, error: `spawn failed: ${err.message}` });
+      activeProcs.delete(proc);
+      const error =
+        (err as NodeJS.ErrnoException).code === "ENOENT"
+          ? "ffmpeg not found. Reinstall Yoink to restore it."
+          : `spawn failed: ${err.message}`;
+      resolve({ success: false, error });
     });
   });
 }

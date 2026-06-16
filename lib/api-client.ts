@@ -29,6 +29,13 @@ export interface HistoryEntry {
   status: "done" | "error";
   completedAt: number;
   error?: string;
+  /**
+   * Absolute path to the downloaded file on disk, captured from yt-dlp's
+   * post-processing output. Used by the editor ("Edit" link) to open the
+   * exact file. Optional because older history entries / error entries
+   * may not have it.
+   */
+  filePath?: string;
 }
 
 export interface VideoInfo {
@@ -39,6 +46,15 @@ export interface VideoInfo {
 }
 
 export interface DownloadRequest {
+  /**
+   * Caller-supplied download id. The renderer generates this up front
+   * (crypto.randomUUID()) so it can create the download card and wire up
+   * its event handlers BEFORE the download starts - the backend uses this
+   * same id as its cancel-registry key and echoes it back. (Previously the
+   * backend minted the id and only returned it on process close, which left
+   * every progress/done event firing against an undefined id.)
+   */
+  id: string;
   url: string;
   mode: "video" | "audio";
   quality: string;
@@ -76,11 +92,25 @@ export interface AudioTrimRequest {
 
 /**
  * Streaming progress event from any of the long-running operations
- * (download, trim, cut, trim-audio).
+ * (download, trim, cut, trim-audio). This union is the single source of
+ * truth for the IPC streaming protocol - every variant here is emitted by
+ * some handler in electron/ipc/ and consumed by some page in app/.
+ *
+ *   start    download/trim/cut/trim-audio  (duration = trim/audio total
+ *            seconds; totalDuration = cut total seconds; output = planned
+ *            output path)
+ *   progress download/trim/cut/trim-audio  (percent always; speed/eta for
+ *            downloads; outTimeSec for ffmpeg ops)
+ *   segment  cut only                       (which kept segment is encoding)
+ *   title    download only                  (resolved video title)
+ *   log      download only                  (raw yt-dlp stdout/stderr line)
+ *   done     all                            (output = final file path)
+ *   error    all
  */
 export type ProgressEvent =
-  | { type: "start"; duration?: number; output?: string }
-  | { type: "progress"; percent: number; speed?: string; eta?: string }
+  | { type: "start"; duration?: number; totalDuration?: number; output?: string }
+  | { type: "progress"; percent: number; speed?: string; eta?: string; outTimeSec?: number }
+  | { type: "segment"; index: number; total: number }
   | { type: "title"; title: string }
   | { type: "log"; text: string }
   | { type: "done"; output?: string }

@@ -12,6 +12,8 @@
 
 import type { IpcMain } from "electron";
 import { dialog, shell } from "electron";
+import fs from "fs";
+import path from "path";
 
 export function register(ipcMain: IpcMain): void {
   ipcMain.handle("folder:pick", async (): Promise<string | null> => {
@@ -25,6 +27,21 @@ export function register(ipcMain: IpcMain): void {
 
   ipcMain.handle("folder:open", async (_event, p: string): Promise<void> => {
     if (!p) return;
-    await shell.openPath(p);
+    // Only ever open a DIRECTORY in the system file manager. A compromised
+    // renderer must not be able to hand us an executable path and have
+    // shell.openPath launch it. If the target is a file (or doesn't exist),
+    // open its containing directory instead.
+    let target = p;
+    try {
+      if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
+        target = path.dirname(target);
+      }
+      if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
+        return; // give up rather than open something unexpected
+      }
+    } catch {
+      return;
+    }
+    await shell.openPath(target);
   });
 }

@@ -1,6 +1,6 @@
 # Yoink
 
-A clean, local GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Runs as a local web app — no accounts, no cloud, just downloads.
+A clean, local desktop app (Electron) wrapping [yt-dlp](https://github.com/yt-dlp/yt-dlp) — no accounts, no cloud, just downloads.
 
 Also includes a [**browser extension**](extension/) (Chrome / Firefox / Edge / Brave / Opera) and a [**Premiere Pro panel plugin**](premiere-plugin/), all sharing the same `%APPDATA%\Yoink\` data folder for unified history and a single shared yt-dlp binary.
 
@@ -39,9 +39,17 @@ Also includes a [**browser extension**](extension/) (Chrome / Firefox / Edge / B
 
 ## Requirements
 
+**End users:** nothing. The installer bundles yt-dlp and ffmpeg, seeding them to
+`%APPDATA%\Yoink\` on first launch. (If a copy already lives there — e.g. from
+the browser extension or Premiere plugin — Yoink uses it instead of overwriting.)
+
+**Building from source:**
+
 - [Node.js](https://nodejs.org/) 18+
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) in your PATH
-- [ffmpeg](https://ffmpeg.org/) in your PATH (for audio extraction and embedding)
+
+yt-dlp and ffmpeg are downloaded automatically at build time by
+`scripts/fetch-ytdlp.mjs` and bundled into the installer — you do not need them
+on your PATH.
 
 ---
 
@@ -49,10 +57,12 @@ Also includes a [**browser extension**](extension/) (Chrome / Firefox / Edge / B
 
 ```bash
 npm install
-npm run dev
+npm run dev:electron
 ```
 
-Then open [http://localhost:3000](http://localhost:3000).
+`dev:electron` starts Next.js and launches the Electron shell once it's ready.
+(`npm run dev` only starts the Next.js dev server with no Electron backend, so
+the app's download functionality won't work — use `dev:electron`.)
 
 ---
 
@@ -77,9 +87,10 @@ The installer is written to `dist/Yoink-Setup-x.y.z.exe`.
 
 ## Stack
 
-- [Next.js 16](https://nextjs.org/) + [React 19](https://react.dev/)
+- [Electron](https://www.electronjs.org/) — desktop shell + Node backend
+- [Next.js 16](https://nextjs.org/) + [React 19](https://react.dev/) — renderer (static export)
 - [Tailwind CSS v4](https://tailwindcss.com/)
-- yt-dlp via `child_process` — no wrappers, no abstractions
+- yt-dlp + ffmpeg via `child_process` — no wrappers, no abstractions
 
 ---
 

@@ -17,6 +17,7 @@
 import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
 // IPC handler registrations - each handler file is registered once here.
 // During the migration any handler that isn't implemented yet just falls
@@ -31,6 +32,8 @@ import { register as registerCut } from "./ipc/cut";
 import { register as registerTrimAudio } from "./ipc/trim-audio";
 import { register as registerYtdlp } from "./ipc/ytdlp";
 import { register as registerFolder } from "./ipc/folder";
+import { readSettings, getDataDir as getDataDirFromData } from "./ipc/_data";
+import { killAllDownloads } from "./ipc/download";
 
 const isDev = !app.isPackaged;
 const DEV_URL = "http://localhost:3000";
@@ -124,6 +127,18 @@ async function createWindow() {
  * Falls back to `<path>/index.html` for folder-style URLs (consistent
  * with trailingSlash: true in next.config.ts).
  */
+/**
+ * True if `target` is `base` itself or lives inside it, comparing on a
+ * path-separator boundary so that `C:\out` does NOT match `C:\out-evil`.
+ * Both arguments must already be normalized real paths.
+ */
+function isWithin(target: string, base: string): boolean {
+  if (!base) return false;
+  const t = path.normalize(target);
+  const b = path.normalize(base);
+  return t === b || t.startsWith(b + path.sep);
+}
+
 function registerAppProtocol(outDir: string) {
   const mimeMap: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -161,9 +176,10 @@ function registerAppProtocol(outDir: string) {
         filePath = path.join(filePath, "index.html");
       }
 
-      // Block path traversal outside outDir
+      // Block path traversal outside outDir. Use a separator-boundary check
+      // so a sibling like `out-evil` can't satisfy a bare startsWith(outDir).
       const normalized = path.normalize(filePath);
-      if (!normalized.startsWith(path.normalize(outDir))) {
+      if (!isWithin(normalized, outDir)) {
         return new Response("Forbidden", { status: 403 });
       }
 
@@ -195,9 +211,43 @@ function registerYoinkFileProtocol() {
       if (!raw || raw.includes("\0") || !fs.existsSync(raw)) {
         return new Response("Not found", { status: 404 });
       }
-      const stat = fs.statSync(raw);
+
+      // Resolve symlinks to the REAL path, then require it to live under one
+      // of the permitted roots. Without this, the renderer could request any
+      // absolute path on disk (arbitrary file read). The roots are: the
+      // user's current output dir, the OS temp dir, and the Yoink data dir.
+      let realPath: string;
+      try {
+        realPath = fs.realpathSync(raw);
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
+
+      const allowedRoots = [
+        readSettings().outputDir,
+        os.tmpdir(),
+        getDataDirFromData(),
+      ].filter(Boolean);
+
+      // Normalize roots through realpath where possible so the boundary
+      // comparison isn't defeated by a symlinked temp dir, etc.
+      const permitted = allowedRoots.some((root) => {
+        let realRoot = root;
+        try {
+          realRoot = fs.realpathSync(root);
+        } catch {
+          /* root may not exist yet — fall back to the raw root */
+        }
+        return isWithin(realPath, realRoot);
+      });
+
+      if (!permitted) {
+        return new Response("Forbidden", { status: 403 });
+      }
+
+      const stat = fs.statSync(realPath);
       if (!stat.isFile()) return new Response("Not a file", { status: 400 });
-      const stream = fs.createReadStream(raw);
+      const stream = fs.createReadStream(realPath);
       return new Response(stream as unknown as ReadableStream, {
         headers: {
           "Content-Length": String(stat.size),
@@ -210,10 +260,71 @@ function registerYoinkFileProtocol() {
   });
 }
 
+/**
+ * First-launch seed: copy the bundled yt-dlp.exe into %APPDATA%\Yoink\
+ * if no yt-dlp is already there. This makes a fresh install work without
+ * any user setup and without colliding with a pre-existing yt-dlp on PATH.
+ *
+ * If the user later clicks "Update yt-dlp" in the UI, the ytdlp:update
+ * handler downloads fresh into the same location, overwriting this seed.
+ * If the user already had yt-dlp at %APPDATA%\Yoink\ from a prior version,
+ * we leave it alone - they may have a specific version pinned intentionally.
+ */
+function seedBundledYtdlp(dataDir: string): void {
+  const target = path.join(dataDir, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
+  if (fs.existsSync(target)) return; // user already has one - don't clobber
+
+  // In a packaged app, extraResources land in process.resourcesPath.
+  // In dev (npm run dev:electron) the resource doesn't exist - skip silently.
+  const bundled = app.isPackaged
+    ? path.join(process.resourcesPath, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp")
+    : path.join(app.getAppPath(), "electron", "resources", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
+
+  if (!fs.existsSync(bundled)) return; // dev or skipped build - no-op
+
+  try {
+    fs.copyFileSync(bundled, target);
+    // Mark executable on POSIX (no-op on Windows)
+    if (process.platform !== "win32") fs.chmodSync(target, 0o755);
+  } catch (e) {
+    console.error("[seedBundledYtdlp]", e);
+  }
+}
+
+/**
+ * First-launch seed for the bundled ffmpeg binary. Mirrors
+ * seedBundledYtdlp: copy the packaged ffmpeg into %APPDATA%\Yoink\ if it
+ * isn't already present so the editor's trim/cut/audio operations work on a
+ * fresh install without the user installing ffmpeg separately. findFfmpeg()
+ * in lib/ffmpeg.ts checks the data dir first.
+ */
+function seedBundledFfmpeg(dataDir: string): void {
+  const filename = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+  const target = path.join(dataDir, filename);
+  if (fs.existsSync(target)) return; // already present — don't clobber
+
+  const bundled = app.isPackaged
+    ? path.join(process.resourcesPath, filename)
+    : path.join(app.getAppPath(), "electron", "resources", filename);
+
+  if (!fs.existsSync(bundled)) return; // dev or skipped build — no-op
+
+  try {
+    fs.copyFileSync(bundled, target);
+    if (process.platform !== "win32") fs.chmodSync(target, 0o755);
+  } catch (e) {
+    console.error("[seedBundledFfmpeg]", e);
+  }
+}
+
 app.whenReady().then(async () => {
   // Ensure data dir exists before any handler tries to write to it
   const dataDir = getDataDir();
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+  // Seed the bundled yt-dlp + ffmpeg on first run (no-op if already present)
+  seedBundledYtdlp(dataDir);
+  seedBundledFfmpeg(dataDir);
 
   registerYoinkFileProtocol();
 
@@ -247,4 +358,16 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// On quit, tear down every child process the streaming handlers spawned
+// (yt-dlp downloads + ffmpeg trim/cut/audio jobs). killAllDownloads()
+// tree-kills each one (taskkill /T /F on Windows) so no orphaned ffmpeg
+// grandchildren keep running after Yoink exits.
+app.on("before-quit", () => {
+  try {
+    killAllDownloads();
+  } catch (e) {
+    console.error("[before-quit] killAllDownloads", e);
+  }
 });

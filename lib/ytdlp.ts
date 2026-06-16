@@ -33,6 +33,29 @@ export function findYtdlp(): string {
 }
 
 /**
+ * Returns true if a yt-dlp binary can be located at the resolved path.
+ * When findYtdlp() falls back to a bare exe name (i.e. relies on PATH),
+ * we resolve it against PATH; if even that fails we return false so callers
+ * can surface a friendly "not found" message instead of an opaque ENOENT.
+ */
+export function ytdlpExists(): boolean {
+  const resolved = findYtdlp();
+  // Absolute path → check it directly.
+  if (path.isAbsolute(resolved)) return fs.existsSync(resolved);
+  // Bare name → walk PATH for it.
+  return resolveOnPath(resolved);
+}
+
+/** Returns true if `exe` is found in any directory listed on PATH. */
+function resolveOnPath(exe: string): boolean {
+  const pathDirs = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  for (const dir of pathDirs) {
+    if (fs.existsSync(path.join(dir, exe))) return true;
+  }
+  return false;
+}
+
+/**
  * Returns the yt-dlp version string, or throws if not found.
  */
 export async function getYtdlpVersion(): Promise<string> {
@@ -55,12 +78,29 @@ export async function getYtdlpVersion(): Promise<string> {
  * which surfaces in the UI as "could not load video info".
  */
 export async function dumpJson(url: string, timeout = 30_000): Promise<Record<string, unknown>> {
+  if (!ytdlpExists()) {
+    throw new Error("yt-dlp not found. Click 'Update yt-dlp' or reinstall Yoink.");
+  }
+
   const { stdout } = await execFileAsync(
     findYtdlp(),
-    ["--dump-json", "--no-download", "--no-playlist", url],
+    // The "--" sentinel stops yt-dlp from interpreting a URL that begins
+    // with "-" as a flag (argument injection guard).
+    ["--dump-json", "--no-download", "--no-playlist", "--", url],
     { timeout, maxBuffer: 32 * 1024 * 1024 }
   );
-  return JSON.parse(stdout.trim().split("\n")[0]);
+
+  // yt-dlp can print warning lines on stdout before the JSON payload, so we
+  // can't blindly parse the first line. Find the first line that looks like a
+  // JSON object instead.
+  const jsonLine = stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.startsWith("{"));
+  if (!jsonLine) {
+    throw new Error("yt-dlp returned no JSON metadata (no object line found in output).");
+  }
+  return JSON.parse(jsonLine);
 }
 
 // ---------------------------------------------------------------------------

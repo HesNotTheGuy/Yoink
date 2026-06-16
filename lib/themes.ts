@@ -6,8 +6,8 @@
  * raw — they get injected via `<style id="theme-override">` so they can
  * override Tailwind v4 custom properties without touching the build.
  *
- * This is the single source of truth. Both the main app (`app/page.tsx`)
- * and the screenshot scripts (`scripts/*-screenshots.mjs`) import from here.
+ * This is the single source of truth for theme definitions, imported by
+ * the main app (`app/page.tsx`).
  */
 
 export type Theme = "slate" | "terminal" | "glass" | "minimal" | "neon" | "brutalist";

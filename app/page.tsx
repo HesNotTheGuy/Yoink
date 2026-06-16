@@ -19,7 +19,7 @@ import {
   type ProgressEvent as ApiProgressEvent,
 } from "@/lib/api-client";
 
-const GUI_VERSION = "3.0.0";
+const GUI_VERSION = "3.0.1";
 
 type Mode = "video" | "audio";
 type DownloadStatus = "idle" | "pending" | "downloading" | "done" | "error";
@@ -55,6 +55,7 @@ interface HistoryEntry {
   status: "done" | "error";
   completedAt: number;
   error?: string;
+  filePath?: string;
 }
 
 interface Settings {
@@ -175,7 +176,7 @@ export default function Home() {
   useEffect(() => {
     getSettings()
       .then((s) => {
-        const settings = s as unknown as Settings;
+        const settings = { ...DEFAULT_SETTINGS, ...(s ?? {}) };
         setOutputDir(settings.outputDir);
         setMode(settings.defaultMode);
         setQuality(settings.defaultQuality);
@@ -294,7 +295,10 @@ export default function Home() {
     async (dlUrl: string) => {
       if (!dlUrl.trim() || !outputDir.trim()) return;
 
-      let id: string;
+      // Generate the download id up front so the card and its event handlers
+      // are wired BEFORE the download starts - the backend uses this same id
+      // as its cancel-registry key and echoes it back on every event.
+      const id = crypto.randomUUID();
       const trimmedUrl = dlUrl.trim();
       const trimmedDir = outputDir.trim();
       const initialTitle = videoInfo?.title || trimmedUrl;
@@ -315,7 +319,7 @@ export default function Home() {
             if (found) {
               notify("Download complete", found.title || trimmedUrl);
               addToast(`Downloaded: ${found.title || trimmedUrl}`, "success");
-              addToHistory({ id, url: trimmedUrl, title: found.title, thumbnail: found.thumbnail, mode, outputDir: trimmedDir, status: "done", completedAt: Date.now() });
+              addToHistory({ id, url: trimmedUrl, title: found.title, thumbnail: found.thumbnail, mode, outputDir: trimmedDir, status: "done", completedAt: Date.now(), filePath: msg.output });
             }
             return prev;
           });
@@ -332,29 +336,8 @@ export default function Home() {
         }
       };
 
-      try {
-        id = await apiStartDownload(
-          {
-            url: trimmedUrl,
-            mode,
-            quality,
-            formatId: selectedFormat,
-            outputDir: trimmedDir,
-            thumbnail: initialThumb,
-            embedMetadata,
-            embedThumbnail,
-            cookiesFile: cookiesFile.trim(),
-            speedLimit: speedLimit.trim(),
-          },
-          handleEvent,
-        );
-      } catch {
-        return;
-      }
-      if (!id) return;
-
+      // Push the card BEFORE starting so streamed events have something to update.
       activeDownloadIds.current.add(id);
-
       const dl: ActiveDownload = {
         id,
         url: trimmedUrl,
@@ -370,6 +353,28 @@ export default function Home() {
         outputDir: trimmedDir,
       };
       setDownloads((prev) => [dl, ...prev]);
+
+      try {
+        await apiStartDownload(
+          {
+            id,
+            url: trimmedUrl,
+            mode,
+            quality,
+            formatId: selectedFormat,
+            outputDir: trimmedDir,
+            thumbnail: initialThumb,
+            embedMetadata,
+            embedThumbnail,
+            cookiesFile: cookiesFile.trim(),
+            speedLimit: speedLimit.trim(),
+          },
+          handleEvent,
+        );
+      } catch {
+        activeDownloadIds.current.delete(id);
+        return;
+      }
     },
     [mode, quality, selectedFormat, outputDir, videoInfo, embedMetadata, embedThumbnail, cookiesFile, speedLimit, updateDownload, appendLog, addToast, addToHistory]
   );
@@ -537,6 +542,7 @@ export default function Home() {
             <button
               onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
               className="ml-1 text-zinc-500 hover:text-zinc-300 transition-colors text-xs leading-none"
+              aria-label="Dismiss notification"
             >
               ✕
             </button>
@@ -861,6 +867,7 @@ export default function Home() {
                       onClick={() => dismissDownload(dl.id)}
                       className="text-xs w-5 h-5 flex items-center justify-center rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-200 transition-colors"
                       title="Dismiss"
+                      aria-label="Dismiss download"
                     >
                       ✕
                     </button>
@@ -1100,7 +1107,7 @@ export default function Home() {
                         </button>
                         {entry.status === "done" && (
                           <a
-                            href={`/${entry.mode === "audio" ? "audio" : "edit"}?file=${encodeURIComponent(`${entry.outputDir}\\${entry.title}`)}`}
+                            href={`/${entry.mode === "audio" ? "audio" : "edit"}?file=${encodeURIComponent(entry.filePath ?? `${entry.outputDir}\\${entry.title}`)}`}
                             className="text-xs px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-center"
                           >
                             Edit
@@ -1109,6 +1116,8 @@ export default function Home() {
                         <button
                           onClick={() => openFolder(entry.outputDir)}
                           className="text-xs px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                          aria-label="Open output folder"
+                          title="Open folder"
                         >
                           📂
                         </button>

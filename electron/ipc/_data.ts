@@ -42,7 +42,13 @@ function readJson<T>(filename: string, fallback: T): T {
 
 function writeJson(filename: string, data: unknown): void {
   ensureDataDir();
-  fs.writeFileSync(path.join(getDataDir(), filename), JSON.stringify(data, null, 2), "utf8");
+  // Atomic write: serialize to a temp file then rename into place. A crash
+  // mid-write leaves the old (intact) file untouched instead of a truncated
+  // one. Mirrors the temp+rename pattern in the ytdlp:update handler.
+  const target = path.join(getDataDir(), filename);
+  const tmp = `${target}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  fs.renameSync(tmp, target);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +74,7 @@ export const DEFAULT_SETTINGS: Settings = {
   embedMetadata: true,
   embedThumbnail: true,
   cookiesFile: "",
+  speedLimit: "",
 };
 
 export function readSettings(): Settings {

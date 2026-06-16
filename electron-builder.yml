@@ -11,6 +11,19 @@ files:
 extraResources:
   - from: yoink.ico
     to: yoink.ico
+  # Bundled yt-dlp.exe. Downloaded by scripts/fetch-ytdlp.mjs before
+  # electron-builder runs. On first launch, electron/main.ts copies it
+  # into %APPDATA%\Yoink\ if no yt-dlp already lives there - so a fresh
+  # install works without the user having to install yt-dlp themselves
+  # or having Yoink conflict with a pre-existing copy on PATH.
+  - from: electron/resources/yt-dlp.exe
+    to: yt-dlp.exe
+  # Bundled ffmpeg.exe. Also downloaded by scripts/fetch-ytdlp.mjs before
+  # electron-builder runs and seeded into %APPDATA%\Yoink\ on first launch
+  # (electron/main.ts) - so audio extraction / muxing works without the user
+  # having ffmpeg on PATH.
+  - from: electron/resources/ffmpeg.exe
+    to: ffmpeg.exe
 asar: true
 asarUnpack:
   - "**/*.node"

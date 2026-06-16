@@ -171,24 +171,19 @@ export default function CutPage() {
 
     try {
       await apiCut({ input: file, segments: ordered }, (msg) => {
-        // The /api/cut route also emits a "segment" event that isn't in the
-        // shared ProgressEvent union — handle it via a broadened type guard.
-        const m = msg as
-          | typeof msg
-          | { type: "segment"; index: number; total: number };
-        if (m.type === "start") {
+        if (msg.type === "start") {
           setStatus("Preparing segments…");
-        } else if (m.type === "segment") {
-          setStatus(`Trimming segment ${m.index + 1}/${m.total}…`);
-        } else if (m.type === "progress") {
-          setProgress(m.percent);
+        } else if (msg.type === "segment") {
+          setStatus(`Trimming segment ${msg.index + 1}/${msg.total}…`);
+        } else if (msg.type === "progress") {
+          setProgress(msg.percent);
           setStatus("Joining segments…");
-        } else if (m.type === "done") {
+        } else if (msg.type === "done") {
           setProgress(100);
           setStatus("Done");
-          if (m.output) setOutputPath(m.output);
-        } else if (m.type === "error") {
-          setError(m.message);
+          if (msg.output) setOutputPath(msg.output);
+        } else if (msg.type === "error") {
+          setError(msg.message);
           setStatus("");
         }
       });
@@ -254,6 +249,7 @@ export default function CutPage() {
                 controls
                 onLoadedMetadata={onLoadedMeta}
                 onTimeUpdate={onTimeUpdate}
+                onError={() => setError("Could not load this file — it may have been moved or deleted.")}
                 className="w-full bg-black aspect-video"
               />
               <div className="px-3 py-2 text-xs text-zinc-500 truncate" title={file}>{file}</div>

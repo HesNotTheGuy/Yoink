@@ -15,6 +15,13 @@ export interface Settings {
   embedMetadata: boolean;
   embedThumbnail: boolean;
   cookiesFile: string;
+  /**
+   * Optional download rate limit passed to yt-dlp's --limit-rate (e.g.
+   * "1M", "500K"). Empty string means unlimited. Lives here in the shared
+   * type so the renderer and the settings IPC handler can't drift - a
+   * missing field here silently dropped the value on save before.
+   */
+  speedLimit: string;
 }
 
 export interface Format {
