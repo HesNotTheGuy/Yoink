@@ -20,7 +20,32 @@ import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { getYtdlpVersion } from "@/lib/ytdlp";
+import { activeDownloadCount } from "./download";
+
+/**
+ * Retries a synchronous fs operation that can transiently fail on Windows
+ * when antivirus / the search indexer briefly locks a freshly written .exe.
+ * Retries only the lock-class errno codes; anything else rethrows immediately.
+ */
+function retryFsSync<T>(fn: () => T, attempts = 5, delayMs = 150): T {
+  for (let i = 0; ; i++) {
+    try {
+      return fn();
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      const transient = code === "EBUSY" || code === "EPERM" || code === "EACCES";
+      if (!transient || i >= attempts - 1) throw err;
+      // Synchronous spin-wait: this runs in the update handler off the
+      // render path, and a short blocking pause is simpler than threading
+      // async through the rename. Total worst-case wait is attempts*delayMs.
+      const until = Date.now() + delayMs;
+      while (Date.now() < until) { /* busy-wait briefly */ }
+    }
+  }
+}
 
 interface CheckUpdateResult {
   current: string;
@@ -87,6 +112,18 @@ export function register(ipcMain: IpcMain): void {
         event.sender.send(channel, msg);
       };
 
+      // Refuse to update while a download is running: the running yt-dlp.exe
+      // (the same seeded copy we're about to replace) holds a Windows image
+      // lock, so the unlink/rename below would fail with EPERM. Tell the user
+      // plainly instead of surfacing a raw OS error.
+      if (activeDownloadCount() > 0) {
+        send({
+          type: "error",
+          message: "Finish or cancel your active downloads before updating yt-dlp.",
+        });
+        return;
+      }
+
       const dataDir = getDataDir();
       const targetPath = path.join(dataDir, getYtdlpFilename());
       const tempPath = `${targetPath}.download`;
@@ -109,39 +146,51 @@ export function register(ipcMain: IpcMain): void {
           return;
         }
 
-        // Stream to a .download tempfile first, then rename atomically.
-        // Avoids leaving a half-written yt-dlp.exe in place if the network drops.
+        // Stream to a .download tempfile, then move into place. Use
+        // stream/promises pipeline so a mid-stream write error (disk full,
+        // I/O fault, AV lock) rejects cleanly into the catch below instead
+        // of throwing as an uncaught exception that crashes the main
+        // process and skips temp cleanup. A pass-through counts bytes for
+        // the progress log.
         const contentLength = Number(res.headers.get("content-length") ?? 0);
-        const writer = fs.createWriteStream(tempPath);
         let received = 0;
         let lastReported = 0;
-
-        const reader = res.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          writer.write(Buffer.from(value));
-          received += value.length;
-          // Throttle log messages: once per 2 MB.
-          if (received - lastReported >= 2 * 1024 * 1024) {
-            lastReported = received;
-            const mb = (received / 1024 / 1024).toFixed(1);
-            const total = contentLength ? ` / ${(contentLength / 1024 / 1024).toFixed(1)} MB` : "";
-            send({ type: "log", text: `  ${mb} MB${total}` });
-          }
-        }
-        writer.end();
-        await new Promise<void>((resolve, reject) => {
-          writer.on("finish", () => resolve());
-          writer.on("error", reject);
+        const progress = new Transform({
+          transform(chunk: Buffer, _enc, cb) {
+            received += chunk.length;
+            if (received - lastReported >= 2 * 1024 * 1024) {
+              lastReported = received;
+              const mb = (received / 1024 / 1024).toFixed(1);
+              const total = contentLength ? ` / ${(contentLength / 1024 / 1024).toFixed(1)} MB` : "";
+              send({ type: "log", text: `  ${mb} MB${total}` });
+            }
+            cb(null, chunk);
+          },
         });
 
-        // Move into place. On Windows, rename onto an existing file works
-        // only if the destination is closed - if Yoink is mid-spawn this
-        // would fail; in practice the update button is a manual action so
-        // there's no concurrent spawn.
-        if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
-        fs.renameSync(tempPath, targetPath);
+        await pipeline(
+          Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
+          progress,
+          fs.createWriteStream(tempPath)
+        );
+
+        // Guard against a silently-truncated download (connection dropped on
+        // a chunked response that undici can't length-check). If the server
+        // advertised a length, the file must match it before we install.
+        if (contentLength > 0) {
+          const got = fs.statSync(tempPath).size;
+          if (got !== contentLength) {
+            throw new Error(`incomplete download (${got} of ${contentLength} bytes)`);
+          }
+        }
+
+        // Move into place. unlink + rename can transiently fail on Windows
+        // when AV / the indexer briefly locks the freshly written .exe, so
+        // retry the lock-class errors a few times before giving up.
+        retryFsSync(() => {
+          if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+          fs.renameSync(tempPath, targetPath);
+        });
 
         const sizeMB = (fs.statSync(targetPath).size / 1024 / 1024).toFixed(1);
         send({ type: "log", text: `Installed to ${targetPath} (${sizeMB} MB)` });
@@ -151,7 +200,12 @@ export function register(ipcMain: IpcMain): void {
         if (fs.existsSync(tempPath)) {
           try { fs.unlinkSync(tempPath); } catch { /* ignore */ }
         }
-        send({ type: "error", message: `Update failed: ${(err as Error).message}` });
+        const code = (err as NodeJS.ErrnoException).code;
+        const message =
+          code === "EBUSY" || code === "EPERM" || code === "EACCES"
+            ? "yt-dlp is in use — close any running downloads and try again."
+            : `Update failed: ${(err as Error).message}`;
+        send({ type: "error", message });
       }
     }
   );

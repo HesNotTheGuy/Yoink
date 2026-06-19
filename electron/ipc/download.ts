@@ -24,6 +24,7 @@ import {
   parseTitleLine,
   type SubtitleOptions,
 } from "@/lib/ytdlp";
+import { findFfmpeg } from "@/lib/ffmpeg";
 
 interface StartPayload {
   id: string;
@@ -49,6 +50,15 @@ const RE_YOINK_PATH = /^\[YOINK_PATH\](.+)$/;
 // Module-scoped registry of live processes so `download:cancel` can find
 // the right child to kill. Entries are removed on close.
 const active = new Map<string, ChildProcess>();
+
+/**
+ * Number of downloads currently running. The yt-dlp update handler checks
+ * this so it doesn't try to replace yt-dlp.exe while a download holds the
+ * Windows image lock on it (which would fail with EPERM).
+ */
+export function activeDownloadCount(): number {
+  return active.size;
+}
 
 // Ids the renderer asked to cancel. Used so the `close` handler can emit a
 // clean terminal event instead of reporting the kill as an error.
@@ -132,9 +142,24 @@ export function register(ipcMain: IpcMain): void {
         event.sender.send(channel, msg);
       };
 
+      // Tell yt-dlp where ffmpeg is. yt-dlp needs ffmpeg for any merge
+      // (default 'best' = bestvideo+bestaudio) and for audio extraction
+      // (-x). Yoink bundles ffmpeg and seeds it to %APPDATA%\Yoink\, which
+      // is NOT on the system PATH - so without this flag yt-dlp would only
+      // find ffmpeg if the user happened to have it on PATH, and every
+      // merge/MP3 download would fail for a fresh install. Pass the
+      // directory (yt-dlp accepts a dir or the binary). Only pass it when
+      // findFfmpeg() resolved an absolute path; the bare-name PATH fallback
+      // is left to yt-dlp's own PATH search.
+      const ffmpegPath = findFfmpeg();
+      const ffmpegArgs = path.isAbsolute(ffmpegPath)
+        ? ["--ffmpeg-location", path.dirname(ffmpegPath)]
+        : [];
+
       const args = [
         ...buildFormatArgs({ mode, quality, formatId, embedMetadata, embedThumbnail }),
         ...buildSubtitleArgs(subtitles, mode),
+        ...ffmpegArgs,
         ...buildTailArgs({
           cookiesFile,
           speedLimit,
@@ -212,7 +237,14 @@ export function register(ipcMain: IpcMain): void {
           } else if (code === 0) {
             send({ type: "done", output: finalPath || undefined });
           } else {
-            const message = lastStderr || `yt-dlp exited with code ${code}`;
+            // yt-dlp's "ffmpeg is not installed" error is opaque to most
+            // users - rewrite it to point at the fix, mirroring the editor
+            // handlers. (With --ffmpeg-location this should be rare, but the
+            // seed can be missing if AV quarantined it.)
+            let message = lastStderr || `yt-dlp exited with code ${code}`;
+            if (/ffmpeg(\sis)?\s+(not\s+installed|not\s+found)/i.test(lastStderr)) {
+              message = "ffmpeg not found. Reinstall Yoink to restore it.";
+            }
             send({ type: "error", message });
           }
           resolve();
