@@ -19,7 +19,7 @@ import {
   type ProgressEvent as ApiProgressEvent,
 } from "@/lib/api-client";
 
-const GUI_VERSION = "3.0.1";
+const GUI_VERSION = "3.0.2";
 
 type Mode = "video" | "audio";
 type DownloadStatus = "idle" | "pending" | "downloading" | "done" | "error";
