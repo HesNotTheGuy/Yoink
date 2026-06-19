@@ -18,12 +18,14 @@ extraResources:
   # or having Yoink conflict with a pre-existing copy on PATH.
   - from: electron/resources/yt-dlp.exe
     to: yt-dlp.exe
-  # Bundled ffmpeg.exe. Also downloaded by scripts/fetch-ytdlp.mjs before
-  # electron-builder runs and seeded into %APPDATA%\Yoink\ on first launch
-  # (electron/main.ts) - so audio extraction / muxing works without the user
-  # having ffmpeg on PATH.
-  - from: electron/resources/ffmpeg.exe
-    to: ffmpeg.exe
+  # Bundled ffmpeg "shared" build FOLDER (ffmpeg.exe + ffprobe.exe + DLLs).
+  # Downloaded/extracted by scripts/fetch-ytdlp.mjs before electron-builder
+  # runs and seeded into %APPDATA%\Yoink\ffmpeg\ on first launch
+  # (electron/main.ts) - so muxing / audio extraction works without the user
+  # having ffmpeg on PATH. The shared build is much smaller than the full
+  # static single-exe and includes ffprobe.
+  - from: electron/resources/ffmpeg
+    to: ffmpeg
 asar: true
 asarUnpack:
   - "**/*.node"

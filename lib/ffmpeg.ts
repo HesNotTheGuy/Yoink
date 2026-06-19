@@ -18,28 +18,31 @@ const execFileAsync = promisify(execFile);
 /**
  * Finds the ffmpeg executable.
  *
+ * Yoink bundles ffmpeg's "shared" build — ffmpeg.exe + ffprobe.exe plus the
+ * DLLs they depend on — and seeds the whole folder to %APPDATA%\Yoink\ffmpeg\
+ * on first launch. ffmpeg.exe must run from beside its DLLs, so we return the
+ * path inside that folder (Windows resolves the sibling DLLs automatically).
+ *
  * Search order:
- *   1. %APPDATA%\Yoink\ffmpeg.exe (shared with extension + Premiere plugin)
- *   2. Sibling of the portable build: <app>/ffmpeg/ffmpeg.exe
+ *   1. %APPDATA%\Yoink\ffmpeg\ffmpeg.exe   (bundled shared build)
+ *   2. %APPDATA%\Yoink\ffmpeg.exe          (legacy flat single-exe seed)
  *   3. PATH fallback
  */
 export function findFfmpeg(): string {
   const exeName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-
-  // 1. Shared Yoink data dir
   const dataDir = process.env.APPDATA
     ? path.join(process.env.APPDATA, "Yoink")
     : path.join(os.homedir(), ".yoink");
-  const shared = path.join(dataDir, exeName);
-  if (fs.existsSync(shared)) return shared;
 
-  // 2. Portable build sibling — when running the standalone server, the
-  //    launcher prepends <app>/ffmpeg to PATH; we still resolve here as a
-  //    belt-and-suspenders check for dev runs.
-  const cwdSibling = path.join(process.cwd(), "ffmpeg", exeName);
-  if (fs.existsSync(cwdSibling)) return cwdSibling;
+  // 1. Bundled shared build (ffmpeg + ffprobe + DLLs in one folder).
+  const inSubdir = path.join(dataDir, "ffmpeg", exeName);
+  if (fs.existsSync(inSubdir)) return inSubdir;
 
-  // 3. PATH
+  // 2. Legacy flat location seeded by older builds (single static exe).
+  const flat = path.join(dataDir, exeName);
+  if (fs.existsSync(flat)) return flat;
+
+  // 3. PATH.
   return exeName;
 }
 

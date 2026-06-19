@@ -292,26 +292,34 @@ function seedBundledYtdlp(dataDir: string): void {
 }
 
 /**
- * First-launch seed for the bundled ffmpeg binary. Mirrors
- * seedBundledYtdlp: copy the packaged ffmpeg into %APPDATA%\Yoink\ if it
- * isn't already present so the editor's trim/cut/audio operations work on a
- * fresh install without the user installing ffmpeg separately. findFfmpeg()
- * in lib/ffmpeg.ts checks the data dir first.
+ * First-launch seed for the bundled ffmpeg. We ship ffmpeg's "shared" build
+ * as a FOLDER (ffmpeg.exe + ffprobe.exe + their DLLs) and copy the whole
+ * folder into %APPDATA%\Yoink\ffmpeg\ if it isn't already there. The shared
+ * exes must sit beside their DLLs to run, hence a folder rather than a single
+ * file. findFfmpeg() in lib/ffmpeg.ts looks in that subdir first, and the
+ * download handler points yt-dlp's --ffmpeg-location at it (so it also picks
+ * up ffprobe). Editor trim/cut/audio operations spawn from the same folder.
  */
 function seedBundledFfmpeg(dataDir: string): void {
-  const filename = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-  const target = path.join(dataDir, filename);
-  if (fs.existsSync(target)) return; // already present — don't clobber
+  const exeName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+  const targetDir = path.join(dataDir, "ffmpeg");
+  const targetExe = path.join(targetDir, exeName);
+  if (fs.existsSync(targetExe)) return; // already seeded — don't clobber
 
-  const bundled = app.isPackaged
-    ? path.join(process.resourcesPath, filename)
-    : path.join(app.getAppPath(), "electron", "resources", filename);
+  const bundledDir = app.isPackaged
+    ? path.join(process.resourcesPath, "ffmpeg")
+    : path.join(app.getAppPath(), "electron", "resources", "ffmpeg");
 
-  if (!fs.existsSync(bundled)) return; // dev or skipped build — no-op
+  if (!fs.existsSync(bundledDir)) return; // dev or skipped build — no-op
 
   try {
-    fs.copyFileSync(bundled, target);
-    if (process.platform !== "win32") fs.chmodSync(target, 0o755);
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.cpSync(bundledDir, targetDir, { recursive: true });
+    if (process.platform !== "win32") {
+      fs.chmodSync(targetExe, 0o755);
+      const probe = path.join(targetDir, "ffprobe");
+      if (fs.existsSync(probe)) fs.chmodSync(probe, 0o755);
+    }
   } catch (e) {
     console.error("[seedBundledFfmpeg]", e);
   }

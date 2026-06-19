@@ -53,17 +53,23 @@ try {
 console.log(`[fetch-ytdlp] wrote ${ytdlpFile} (${sizeMB(ytdlpFile)} MB)`);
 
 // ---------------------------------------------------------------------------
-//  2. ffmpeg (Windows static build from yt-dlp/FFmpeg-Builds)
+//  2. ffmpeg — "shared" build from yt-dlp/FFmpeg-Builds (Windows)
 // ---------------------------------------------------------------------------
-//  The release ships ffmpeg.exe inside a zip; Node has no built-in unzip, so
-//  on Windows we shell out to PowerShell's Expand-Archive (this is a Windows
-//  build script). A flaky ffmpeg mirror should produce a clear error and a
-//  non-zero exit (so CI notices) without corrupting the yt-dlp we already
-//  fetched.
+//  We use the SHARED build, not the full static one: its ffmpeg.exe and
+//  ffprobe.exe are tiny (~few hundred KB each) and depend on sibling DLLs in
+//  the same bin/ folder. Total is ~150 MB vs ~195 MB for a single static
+//  ffmpeg.exe (and that one lacks ffprobe). We extract the whole bin/ folder
+//  to electron/resources/ffmpeg/ so the exes + their DLLs travel together;
+//  electron-builder bundles the folder and main.ts seeds it to
+//  %APPDATA%\Yoink\ffmpeg\ on first launch.
+//
+//  Node has no built-in unzip, so on Windows we shell out to PowerShell's
+//  Expand-Archive (this is a Windows build script). A flaky mirror produces a
+//  clear error and non-zero exit without corrupting the yt-dlp we fetched.
 
-const ffmpegFile = path.join(outDir, "ffmpeg.exe");
+const ffmpegDir = path.join(outDir, "ffmpeg");
 const ffmpegZipUrl =
-  "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip";
+  "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl-shared.zip";
 
 if (process.platform !== "win32") {
   console.warn("[fetch-ytdlp] skipping ffmpeg fetch (non-Windows build host)");
@@ -73,10 +79,8 @@ if (process.platform !== "win32") {
   try {
     console.log(`[fetch-ytdlp] downloading ${ffmpegZipUrl}`);
     await download(ffmpegZipUrl, zipPath);
-    console.log(`[fetch-ytdlp] extracting ffmpeg.exe (zip ${sizeMB(zipPath)} MB)`);
+    console.log(`[fetch-ytdlp] extracting ffmpeg shared build (zip ${sizeMB(zipPath)} MB)`);
 
-    // Expand-Archive into tmpDir, then locate ffmpeg.exe in the nested
-    // bin/ folder (the zip's top-level dir name is versioned, so we search).
     execFileSync(
       "powershell.exe",
       [
@@ -88,10 +92,28 @@ if (process.platform !== "win32") {
       { stdio: ["ignore", "inherit", "inherit"] }
     );
 
-    const found = findFile(tmpDir, "ffmpeg.exe");
-    if (!found) throw new Error("ffmpeg.exe not found inside extracted archive");
-    fs.copyFileSync(found, ffmpegFile);
-    console.log(`[fetch-ytdlp] wrote ${ffmpegFile} (${sizeMB(ffmpegFile)} MB)`);
+    // The zip's top-level dir is versioned (e.g. ffmpeg-master-...-shared/);
+    // locate the bin/ folder that contains ffmpeg.exe + ffprobe.exe + DLLs.
+    const ffmpegExe = findFile(tmpDir, "ffmpeg.exe");
+    if (!ffmpegExe) throw new Error("ffmpeg.exe not found inside extracted archive");
+    const binDir = path.dirname(ffmpegExe);
+    if (!fs.existsSync(path.join(binDir, "ffprobe.exe"))) {
+      throw new Error("ffprobe.exe not found beside ffmpeg.exe in the archive");
+    }
+
+    // Replace any prior contents, then copy the whole bin/ folder.
+    fs.rmSync(ffmpegDir, { recursive: true, force: true });
+    fs.mkdirSync(ffmpegDir, { recursive: true });
+    fs.cpSync(binDir, ffmpegDir, { recursive: true });
+
+    // Drop ffplay.exe + its SDL dependency — we never use it, and it pulls an
+    // extra DLL. Best-effort; ignore if absent.
+    for (const extra of ["ffplay.exe"]) {
+      try { fs.rmSync(path.join(ffmpegDir, extra), { force: true }); } catch { /* ignore */ }
+    }
+
+    const total = dirSizeMB(ffmpegDir);
+    console.log(`[fetch-ytdlp] wrote ${ffmpegDir}\\ (ffmpeg.exe + ffprobe.exe + DLLs, ${total} MB)`);
   } catch (err) {
     console.error(`[fetch-ytdlp] ffmpeg fetch failed: ${err.message}`);
     process.exit(1);
@@ -112,4 +134,13 @@ function findFile(dir, name) {
     }
   }
   return null;
+}
+
+/** Total size in MB (1 decimal) of all files directly in `dir`. */
+function dirSizeMB(dir) {
+  let bytes = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isFile()) bytes += fs.statSync(path.join(dir, entry.name)).size;
+  }
+  return (bytes / 1024 / 1024).toFixed(1);
 }
