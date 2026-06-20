@@ -68,8 +68,14 @@ console.log(`[fetch-ytdlp] wrote ${ytdlpFile} (${sizeMB(ytdlpFile)} MB)`);
 //  clear error and non-zero exit without corrupting the yt-dlp we fetched.
 
 const ffmpegDir = path.join(outDir, "ffmpeg");
+// LGPL shared build from BtbN (yt-dlp's fork only ships GPL). Drops the
+// GPL-only video ENCODERS (x264/x265/aom/svtav1) that Yoink never uses
+// (yt-dlp remuxes video, never re-encodes it), but keeps the muxers + audio
+// encoders we need (libmp3lame, aac, flac, opus). ~85 MB zip vs ~210 MB for
+// the GPL build, and still ships ffprobe. The mp3-encode capability is
+// verified at build time below.
 const ffmpegZipUrl =
-  "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl-shared.zip";
+  "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl-shared.zip";
 
 if (process.platform !== "win32") {
   console.warn("[fetch-ytdlp] skipping ffmpeg fetch (non-Windows build host)");
@@ -112,8 +118,19 @@ if (process.platform !== "win32") {
       try { fs.rmSync(path.join(ffmpegDir, extra), { force: true }); } catch { /* ignore */ }
     }
 
+    // Self-validate: the bundled ffmpeg MUST be able to encode mp3 (audio
+    // downloads + the audio clipper depend on libmp3lame). Fail the build
+    // loudly if a future/leaner ffmpeg variant drops it, rather than shipping
+    // an installer where "Audio (MP3)" silently fails for every user.
+    const encoders = execFileSync(path.join(ffmpegDir, "ffmpeg.exe"), ["-hide_banner", "-encoders"], {
+      encoding: "utf8",
+    });
+    if (!/\blibmp3lame\b/.test(encoders)) {
+      throw new Error("bundled ffmpeg lacks libmp3lame — mp3 extraction would fail; aborting");
+    }
+
     const total = dirSizeMB(ffmpegDir);
-    console.log(`[fetch-ytdlp] wrote ${ffmpegDir}\\ (ffmpeg.exe + ffprobe.exe + DLLs, ${total} MB)`);
+    console.log(`[fetch-ytdlp] wrote ${ffmpegDir}\\ (ffmpeg.exe + ffprobe.exe + DLLs, ${total} MB; libmp3lame OK)`);
   } catch (err) {
     console.error(`[fetch-ytdlp] ffmpeg fetch failed: ${err.message}`);
     process.exit(1);
