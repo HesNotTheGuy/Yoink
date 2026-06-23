@@ -57,12 +57,21 @@ on your PATH.
 
 ```bash
 npm install
+node scripts/fetch-ytdlp.mjs   # one-time: download yt-dlp + ffmpeg for dev
 npm run dev:electron
 ```
 
 `dev:electron` starts Next.js and launches the Electron shell once it's ready.
 (`npm run dev` only starts the Next.js dev server with no Electron backend, so
 the app's download functionality won't work — use `dev:electron`.)
+
+**Binaries in dev:** the production installer bundles yt-dlp + ffmpeg, but
+`dev:electron` does **not** fetch them. Run `node scripts/fetch-ytdlp.mjs` once
+after cloning — it populates `electron/resources/`, which the app then seeds
+into `%APPDATA%\Yoink\` on first launch. (Alternatively, having `yt-dlp` and
+`ffmpeg` on your PATH works too — the app falls back to PATH.) `npm run
+build:electron` runs this fetch automatically, so it's only a manual step for
+dev mode.
 
 ---
 
