@@ -11,6 +11,11 @@ files:
 extraResources:
   - from: yoink.ico
     to: yoink.ico
+  # Third-party license/attribution notices (yt-dlp, FFmpeg). Shipped in the
+  # install dir to satisfy FFmpeg's LGPL redistribution requirements. The
+  # FFmpeg license text itself rides along inside the ffmpeg/ folder below.
+  - from: THIRD-PARTY-NOTICES.md
+    to: THIRD-PARTY-NOTICES.md
   # Bundled yt-dlp.exe. Downloaded by scripts/fetch-ytdlp.mjs before
   # electron-builder runs. On first launch, electron/main.ts copies it
   # into %APPDATA%\Yoink\ if no yt-dlp already lives there - so a fresh

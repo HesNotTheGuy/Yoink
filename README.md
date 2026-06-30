@@ -103,4 +103,21 @@ The installer is written to `dist/Yoink-Setup-x.y.z.exe`.
 
 ---
 
+## Licenses & credits
+
+Yoink is public domain ([UNLICENSE](UNLICENSE)). It stands entirely on two
+projects, bundled and redistributed with every installer:
+
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — the download engine. Released
+  under The Unlicense (public domain). Yoink is just a GUI around it.
+- **[FFmpeg](https://ffmpeg.org)** — muxing & audio extraction. Bundled as
+  [BtbN's](https://github.com/BtbN/FFmpeg-Builds) unmodified **LGPL shared**
+  build; its license text ships at `ffmpeg/LICENSE.txt` in the install dir.
+
+Full attribution and license details are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which is also shipped with the
+installer.
+
+---
+
 made by The Guy

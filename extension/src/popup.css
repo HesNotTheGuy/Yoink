@@ -381,3 +381,15 @@ body {
   transition: color 0.15s;
 }
 .footer a:hover { color: #6366f1; }
+
+.footer-credit {
+  margin-top: 5px;
+  font-size: 10px;
+  color: #4a6180;
+}
+.footer-credit a {
+  font-size: 10px;
+  color: #4a6180;
+  text-decoration: underline;
+}
+.footer-credit a:hover { color: #6366f1; }

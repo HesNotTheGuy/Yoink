@@ -931,7 +931,13 @@ export default function Home() {
       <div className="text-center text-xs text-zinc-600 pb-4 space-y-0.5">
         <p>GUI v{GUI_VERSION}</p>
         <p>made by The Guy</p>
-        {ytdlpVersion && <p className="text-zinc-700">yt-dlp {ytdlpVersion}</p>}
+        <p className="text-zinc-700">
+          Powered by{" "}
+          <a href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noreferrer" className="underline hover:text-zinc-400">yt-dlp</a>
+          {" & "}
+          <a href="https://ffmpeg.org" target="_blank" rel="noreferrer" className="underline hover:text-zinc-400">FFmpeg</a>
+          {ytdlpVersion ? ` · yt-dlp ${ytdlpVersion}` : ""}
+        </p>
       </div>
 
       {/* ── Settings Drawer ─────────────────────────────────────────────── */}

@@ -118,6 +118,27 @@ if (process.platform !== "win32") {
       try { fs.rmSync(path.join(ffmpegDir, extra), { force: true }); } catch { /* ignore */ }
     }
 
+    // The LGPL asks for FFmpeg's license text to travel with its binaries.
+    // BtbN's archive puts a LICENSE file at the archive root (one level above
+    // bin/); copy it next to the DLLs so it ships alongside them.
+    const archiveRoot = path.dirname(binDir);
+    const licenseFiles = fs
+      .readdirSync(archiveRoot, { withFileTypes: true })
+      .filter((e) => e.isFile() && /^(LICENSE|COPYING)/i.test(e.name))
+      .map((e) => e.name);
+    if (licenseFiles.length === 0) {
+      // Fail the build if the license text is missing rather than shipping the
+      // FFmpeg binaries without it (mirrors the libmp3lame guard below).
+      throw new Error(
+        "FFmpeg LICENSE file not found in the archive — aborting so it always " +
+          "ships alongside the binaries. Check the BtbN archive layout."
+      );
+    }
+    for (const name of licenseFiles) {
+      fs.copyFileSync(path.join(archiveRoot, name), path.join(ffmpegDir, name));
+    }
+    console.log(`[fetch-ytdlp] bundled ffmpeg license: ${licenseFiles.join(", ")}`);
+
     // Self-validate: the bundled ffmpeg MUST be able to encode mp3 (audio
     // downloads + the audio clipper depend on libmp3lame). Fail the build
     // loudly if a future/leaner ffmpeg variant drops it, rather than shipping
