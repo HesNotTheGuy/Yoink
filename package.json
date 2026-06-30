@@ -1,6 +1,6 @@
 {
   "name": "yoink",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "private": true,
   "description": "A clean, local GUI for yt-dlp.",
   "author": "The Guy",
