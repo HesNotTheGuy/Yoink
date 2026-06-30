@@ -275,12 +275,16 @@ function seedBundledYtdlp(dataDir: string): void {
   if (fs.existsSync(target)) return; // user already has one - don't clobber
 
   // In a packaged app, extraResources land in process.resourcesPath.
-  // In dev (npm run dev:electron) the resource doesn't exist - skip silently.
+  // In dev (npm run dev:electron) the binary lives in the repo at
+  // electron/resources/ (populated by scripts/fetch-ytdlp.mjs). We resolve it
+  // from __dirname (dist-electron/main.js → repo root via "..") rather than
+  // app.getAppPath(), which in dev points at dist-electron/ — NOT the repo
+  // root — so the old path never existed and seeding silently no-op'd.
   const bundled = app.isPackaged
     ? path.join(process.resourcesPath, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp")
-    : path.join(app.getAppPath(), "electron", "resources", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
+    : path.join(__dirname, "..", "electron", "resources", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
 
-  if (!fs.existsSync(bundled)) return; // dev or skipped build - no-op
+  if (!fs.existsSync(bundled)) return; // resource not fetched yet - no-op
 
   try {
     fs.copyFileSync(bundled, target);
@@ -306,11 +310,14 @@ function seedBundledFfmpeg(dataDir: string): void {
   const targetExe = path.join(targetDir, exeName);
   if (fs.existsSync(targetExe)) return; // already seeded — don't clobber
 
+  // Same dev-path fix as seedBundledYtdlp: resolve from __dirname so the repo's
+  // electron/resources/ffmpeg/ folder is found in dev (app.getAppPath() points
+  // at dist-electron/ in dev, not the repo root).
   const bundledDir = app.isPackaged
     ? path.join(process.resourcesPath, "ffmpeg")
-    : path.join(app.getAppPath(), "electron", "resources", "ffmpeg");
+    : path.join(__dirname, "..", "electron", "resources", "ffmpeg");
 
-  if (!fs.existsSync(bundledDir)) return; // dev or skipped build — no-op
+  if (!fs.existsSync(bundledDir)) return; // resource not fetched yet — no-op
 
   try {
     fs.mkdirSync(targetDir, { recursive: true });
