@@ -22,7 +22,7 @@ Settings and themes let a user open the settings drawer, pick one of six color t
 Preconditions:
 
 - Yoink is healthy from `control-yoink doctor`.
-- Isolated data dir is `/tmp/yoink-verify-<id>/.yoink` on POSIX, or `/tmp/yoink-verify-<id>/AppData/Roaming/Yoink` on Windows.
+- Isolated data dir is `/tmp/yoink-verify-<id>/.yoink` on Linux and macOS, or `/tmp/yoink-verify-<id>/AppData/Roaming/Yoink` on Windows.
 - Evidence directory is `.cursor/skills/verify-yoink/evidence/<id>/`.
 
 - **Open settings.** Choose **⚙ Settings**. Run `node .cursor/skills/verify-yoink/scripts/control-yoink.mjs click --text "⚙ Settings" --exact`. A heading **Settings** appears with **Color Theme**.
@@ -41,3 +41,4 @@ Preconditions:
 - Cookies File and Speed Limit are free text. Use fake values such as `/tmp/yoink-verify-<id>/cookies.txt` and `500K`. Never paste a real cookies file.
 - `settings-file` prints `null` until the first save. Defaults still apply in the UI.
 - Do not screenshot a path that includes an operator home directory. If `outputDir` is not under `/tmp/yoink-verify-`, stop. The instance is not isolated.
+- Labels such as Color Theme appear as COLOR THEME on screen because of CSS `uppercase`. `wait --text` ignores case. `fill --label` still uses the source string `Default Output Folder`.

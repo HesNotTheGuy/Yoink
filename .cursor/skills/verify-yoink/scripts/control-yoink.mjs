@@ -247,6 +247,8 @@ function requireState() {
 }
 
 function isolatedEnv(state) {
+  const originalHome = process.env.HOME || os.homedir();
+  const inheritedXauth = process.env.XAUTHORITY || path.join(originalHome, ".Xauthority");
   const env = { ...process.env };
   env.HOME = state.homeDir;
   env.USERPROFILE = state.homeDir;
@@ -255,6 +257,9 @@ function isolatedEnv(state) {
   env.XDG_DATA_HOME = path.join(state.homeDir, ".local", "share");
   env.NODE_ENV = "development";
   env.ELECTRON_ENABLE_LOGGING = "1";
+  if (inheritedXauth && fs.existsSync(inheritedXauth)) {
+    env.XAUTHORITY = inheritedXauth;
+  }
   if (process.platform === "win32") {
     env.APPDATA = path.join(state.homeDir, "AppData", "Roaming");
   } else {
@@ -519,14 +524,15 @@ async function cmdLaunch(flags) {
 
   let electronCmd = electronBin(repoRoot);
   let electronArgv = electronArgs;
-  if (process.platform === "linux" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
-    const xvfb = "/usr/bin/xvfb-run";
-    if (!fs.existsSync(xvfb)) {
-      killTree(state.nextPid);
+  const xvfb = "/usr/bin/xvfb-run";
+  if (process.platform === "linux") {
+    if (fs.existsSync(xvfb)) {
+      electronCmd = xvfb;
+      electronArgv = ["-a", electronBin(repoRoot), ...electronArgs];
+    } else if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+      await cmdCleanup({ "keep-scratch": true }, { silent: true });
       die("No DISPLAY and xvfb-run is missing. Provide a display or install xvfb.");
     }
-    electronCmd = xvfb;
-    electronArgv = ["-a", electronBin(repoRoot), ...electronArgs];
   }
 
   const electronChild = spawnLogged(electronCmd, electronArgv, {
@@ -552,6 +558,7 @@ async function cmdLaunch(flags) {
     } catch (err) {
       lastErr = err.message;
       if (!pidAlive(state.electronPid)) {
+        await cmdCleanup({ "keep-scratch": true }, { silent: true });
         die(`Electron exited during launch. ${lastErr}. See ${electronLog}`);
       }
       await sleep(300);
@@ -685,7 +692,13 @@ async function cmdWait(flags) {
   const needle = JSON.stringify(text);
   while (Date.now() - start < timeout) {
     const found = await withPage(state, (cdp) =>
-      cdp.evaluate(`document.body && document.body.innerText.includes(${needle})`)
+      cdp.evaluate(
+        `(() => {
+          const needle = ${needle}.toLowerCase();
+          const hay = (document.body && document.body.innerText) || "";
+          return hay.toLowerCase().includes(needle);
+        })()`
+      )
     );
     if (found) {
       console.log(JSON.stringify({ found: true, text }));

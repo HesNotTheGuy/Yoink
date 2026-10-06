@@ -1,6 +1,6 @@
 ---
 name: verify-yoink
-description: "Drives the Yoink Electron desktop app (Next.js renderer plus yt-dlp via child_process) through control-yoink and Chrome DevTools Protocol. Use when proving paste-URL download, format picker, history, settings, themes, or trim/cut/audio editor behavior in this repo, or when a change needs runtime evidence from the real GUI rather than vitest."
+description: "Drives the Yoink Electron desktop app (Next.js renderer plus yt-dlp via child_process) through control-yoink and Chrome DevTools Protocol. Use when proving paste-URL download, format picker, history, settings, themes, or trim, cut, or audio clipper behavior in this repo, or when a change needs runtime evidence from the real GUI rather than vitest."
 ---
 
 # Verify Yoink
@@ -27,7 +27,7 @@ The helper does the following:
 2. Builds an isolated home under `/tmp/yoink-verify-<run-id>/` and points `HOME` (and `APPDATA` on Windows) at it so settings land in that tree, not the operator's real Yoink data dir.
 3. Starts `next dev --hostname 127.0.0.1 --port 3000`.
 4. Runs `node electron/build.mjs`.
-5. Starts Electron with `--user-data-dir` under the isolated home, `--remote-debugging-port`, and on Linux `--no-sandbox --disable-gpu`. Those flags are verification-only.
+5. Starts Electron with `--user-data-dir` under the isolated home and `--remote-debugging-port`. On Linux it also passes `--no-sandbox --disable-gpu`. When `xvfb-run` exists, Linux wraps the binary in `xvfb-run -a` so the operator display is not required. Those flags are verification-only. The helper keeps `XAUTHORITY` pointing at the original cookie file so a real `DISPLAY` still works if xvfb is absent.
 6. Waits until CDP sees the renderer page and the `h1` text is `Yoink`.
 
 Ready means the helper printed JSON that includes `electronPid`, `dataDir`, `evidenceDir`, and `cdpPort`, and `doctor` exits 0.
@@ -81,7 +81,9 @@ Stable handles from the main window:
 
 The Download button stays disabled until the URL field is non-empty and Output Folder is non-empty. Default output is the isolated `Downloads` directory after launch because `electron/ipc/_data.ts` joins `os.homedir()` with `Downloads`.
 
-Info and format lists debounce 800 ms after the URL changes (`app/page.tsx`). Wait for the preview title or `Could not load video info` before asserting formats.
+Info and format lists wait 800 ms after the last URL change (`app/page.tsx`). Wait for the preview title or `Could not load video info` before asserting formats.
+
+`wait --text` matches `document.body.innerText` and ignores letter case. Labels such as Color Theme render as COLOR THEME because of CSS `uppercase`.
 
 ## Evidence
 

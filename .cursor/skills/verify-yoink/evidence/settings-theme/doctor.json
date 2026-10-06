@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "name": "state-file",
+      "ok": true,
+      "detail": "/tmp/yoink-verify-settings-theme/state.json"
+    },
+    {
+      "name": "next-pid-alive",
+      "ok": true,
+      "detail": "4954"
+    },
+    {
+      "name": "electron-pid-alive",
+      "ok": true,
+      "detail": "5019"
+    },
+    {
+      "name": "home-is-tmp",
+      "ok": true,
+      "detail": "/tmp/yoink-verify-settings-theme"
+    },
+    {
+      "name": "data-dir-isolated",
+      "ok": true,
+      "detail": "/tmp/yoink-verify-settings-theme/.yoink"
+    },
+    {
+      "name": "evidence-dir",
+      "ok": true,
+      "detail": ".cursor/skills/verify-yoink/evidence/settings-theme"
+    },
+    {
+      "name": "next-http",
+      "ok": true,
+      "detail": "http://127.0.0.1:3000"
+    },
+    {
+      "name": "cdp-renderer",
+      "ok": true,
+      "detail": "http://localhost:3000/"
+    },
+    {
+      "name": "heading-yoink",
+      "ok": true,
+      "detail": "Yoink"
+    }
+  ],
+  "state": {
+    "runId": "settings-theme",
+    "repoRoot": ".",
+    "homeDir": "/tmp/yoink-verify-settings-theme",
+    "dataDir": "/tmp/yoink-verify-settings-theme/.yoink",
+    "outputDir": "/tmp/yoink-verify-settings-theme/Downloads",
+    "userDataDir": "/tmp/yoink-verify-settings-theme/electron-user-data",
+    "evidenceDir": ".cursor/skills/verify-yoink/evidence/settings-theme",
+    "logsDir": "/tmp/yoink-verify-settings-theme/logs",
+    "cdpPort": 9222,
+    "nextPort": 3000,
+    "nextPid": 4954,
+    "electronPid": 5019,
+    "startedAt": "2026-10-06T23:18:59.095Z"
+  }
+}
