@@ -9,6 +9,7 @@ import { promisify } from "util";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { parseInputUrl } from "@/lib/youtube-url";
 
 const execFileAsync = promisify(execFile);
 
@@ -68,8 +69,8 @@ export async function getYtdlpVersion(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 /**
- * Calls `yt-dlp --dump-json --no-download --no-playlist <url>` and returns
- * the parsed JSON of the first line (the video metadata). Throws on failure.
+ * Calls `yt-dlp` via `buildProbeArgs` (`--dump-json --no-download --no-playlist`)
+ * and returns the parsed JSON of the first object line. Throws on failure.
  *
  * maxBuffer is intentionally large: yt-dlp's JSON dump for a YouTube video
  * routinely runs 500 KB - 2 MB once every format variant is included, and
@@ -84,9 +85,7 @@ export async function dumpJson(url: string, timeout = 30_000): Promise<Record<st
 
   const { stdout } = await execFileAsync(
     findYtdlp(),
-    // The "--" sentinel stops yt-dlp from interpreting a URL that begins
-    // with "-" as a flag (argument injection guard).
-    ["--dump-json", "--no-download", "--no-playlist", "--", url],
+    buildProbeArgs({ url }),
     { timeout, maxBuffer: 32 * 1024 * 1024 }
   );
 
@@ -138,11 +137,30 @@ const QUALITY_FORMAT_MAP: Record<string, string> = {
   "360p": "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]",
 };
 
+// Shorts labeled "1080p" are often 1080x1920. height<=1080 would drop the
+// full-quality vertical stream. Cap width instead, and always fall back to /best.
+const SHORTS_QUALITY_FORMAT_MAP: Record<string, string> = {
+  best:    "bestvideo+bestaudio/best",
+  "1080p": "bestvideo[width<=1080]+bestaudio/best[width<=1080]/best",
+  "720p":  "bestvideo[width<=720]+bestaudio/best[width<=720]/best",
+  "480p":  "bestvideo[width<=480]+bestaudio/best[width<=480]/best",
+  "360p":  "bestvideo[width<=360]+bestaudio/best[width<=360]/best",
+};
+
+export type YoutubeUrlKind = "youtube-short" | "other";
+
+export type FormatArgsInput = Pick<
+  DownloadArgsInput,
+  "mode" | "quality" | "formatId" | "embedMetadata" | "embedThumbnail"
+> & {
+  urlKind?: YoutubeUrlKind;
+};
+
 /**
  * Builds the format/quality args portion of a yt-dlp call.
  * Does NOT include the URL, output template, or generic flags like --newline.
  */
-export function buildFormatArgs(opts: Pick<DownloadArgsInput, "mode" | "quality" | "formatId" | "embedMetadata" | "embedThumbnail">): string[] {
+export function buildFormatArgs(opts: FormatArgsInput): string[] {
   const args: string[] = [];
 
   if (opts.mode === "audio") {
@@ -155,9 +173,10 @@ export function buildFormatArgs(opts: Pick<DownloadArgsInput, "mode" | "quality"
     return args;
   }
 
-  // Video
   if (opts.formatId && opts.formatId !== "bestvideo+bestaudio/best") {
     args.push("-f", opts.formatId);
+  } else if (opts.urlKind === "youtube-short") {
+    args.push("-f", SHORTS_QUALITY_FORMAT_MAP[opts.quality] ?? SHORTS_QUALITY_FORMAT_MAP.best);
   } else {
     args.push("-f", QUALITY_FORMAT_MAP[opts.quality] ?? QUALITY_FORMAT_MAP.best);
   }
@@ -193,6 +212,106 @@ export function buildTailArgs(opts: { cookiesFile?: string; speedLimit?: string;
   if (opts.speedLimit) args.push("--limit-rate", opts.speedLimit);
   args.push("--newline", "-o", opts.outputTemplate);
   return args;
+}
+
+export type JsRuntime = { kind: "deno" | "node"; executable: string };
+
+export function buildJsRuntimeArgs(runtime: JsRuntime | null): string[] {
+  if (!runtime) return [];
+  return ["--js-runtimes", `${runtime.kind}:${runtime.executable}`];
+}
+
+function findExecutableOnPath(exe: string): string | null {
+  const pathDirs = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  for (const dir of pathDirs) {
+    const candidate = path.join(dir, exe);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/** Prefer deno (yt-dlp default), then node. Look beside yt-dlp, then PATH. */
+export function findJsRuntime(): JsRuntime | null {
+  const ytdlp = findYtdlp();
+  const besideDir = path.isAbsolute(ytdlp) ? path.dirname(ytdlp) : null;
+  const denoName = process.platform === "win32" ? "deno.exe" : "deno";
+  const nodeName = process.platform === "win32" ? "node.exe" : "node";
+
+  if (besideDir) {
+    const denoBeside = path.join(besideDir, denoName);
+    if (fs.existsSync(denoBeside)) return { kind: "deno", executable: denoBeside };
+  }
+  const denoOnPath = findExecutableOnPath(denoName);
+  if (denoOnPath) return { kind: "deno", executable: denoOnPath };
+
+  if (besideDir) {
+    const nodeBeside = path.join(besideDir, nodeName);
+    if (fs.existsSync(nodeBeside)) return { kind: "node", executable: nodeBeside };
+  }
+  const nodeOnPath = findExecutableOnPath(nodeName);
+  if (nodeOnPath) return { kind: "node", executable: nodeOnPath };
+
+  return null;
+}
+
+export function buildProbeArgs(opts: { url: string; jsRuntime?: JsRuntime | null }): string[] {
+  const runtime = opts.jsRuntime === undefined ? findJsRuntime() : opts.jsRuntime;
+  return [
+    "--dump-json",
+    "--no-download",
+    "--no-playlist",
+    ...buildJsRuntimeArgs(runtime),
+    "--",
+    opts.url,
+  ];
+}
+
+export interface BuildDownloadArgvInput {
+  url: string;
+  mode: DownloadMode;
+  quality: string;
+  formatId?: string;
+  embedMetadata?: boolean;
+  embedThumbnail?: boolean;
+  cookiesFile?: string;
+  speedLimit?: string;
+  subtitles?: SubtitleOptions;
+  outputTemplate: string;
+  ffmpegLocation?: string;
+  jsRuntime?: JsRuntime | null;
+}
+
+export function buildDownloadArgv(opts: BuildDownloadArgvInput): string[] {
+  const parsed = parseInputUrl(opts.url);
+  const urlKind: YoutubeUrlKind = parsed?.kind === "youtube-short" ? "youtube-short" : "other";
+  const runtime = opts.jsRuntime === undefined ? findJsRuntime() : opts.jsRuntime;
+  const ffmpegArgs = opts.ffmpegLocation
+    ? ["--ffmpeg-location", opts.ffmpegLocation]
+    : [];
+  return [
+    ...buildFormatArgs({
+      mode: opts.mode,
+      quality: opts.quality,
+      formatId: opts.formatId,
+      embedMetadata: opts.embedMetadata,
+      embedThumbnail: opts.embedThumbnail,
+      urlKind,
+    }),
+    ...buildSubtitleArgs(opts.subtitles, opts.mode),
+    ...ffmpegArgs,
+    ...buildJsRuntimeArgs(runtime),
+    ...(urlKind === "youtube-short" ? ["--no-playlist"] : []),
+    ...buildTailArgs({
+      cookiesFile: opts.cookiesFile,
+      speedLimit: opts.speedLimit,
+      outputTemplate: opts.outputTemplate,
+    }),
+    "--print",
+    "after_move:[YOINK_PATH]%(filepath)s",
+    "--no-simulate",
+    "--",
+    opts.url,
+  ];
 }
 
 // ---------------------------------------------------------------------------

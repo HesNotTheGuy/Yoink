@@ -49,7 +49,3 @@ export function parseInputUrl(raw: string): ParsedInputUrl | null {
 
   return { kind: "other", href };
 }
-
-export function isYoutubeShortUrl(raw: string): boolean {
-  return parseInputUrl(raw)?.kind === "youtube-short";
-}

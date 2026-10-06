@@ -5,7 +5,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  buildDownloadArgv,
   buildFormatArgs,
+  buildJsRuntimeArgs,
+  buildProbeArgs,
   buildSubtitleArgs,
   buildTailArgs,
   parseProgressLine,
@@ -150,3 +153,107 @@ describe("parseTitleLine", () => {
     expect(parseTitleLine("[download]  50% of 1MiB at 1MiB/s ETA 00:01")).toBeNull();
   });
 });
+
+const SHORT_URL = "https://www.youtube.com/shorts/AAAAAAAAAAA";
+const WATCH_URL = "https://www.youtube.com/watch?v=AAAAAAAAAAA";
+
+describe("buildFormatArgs for YouTube Shorts", () => {
+  it("uses a width cap and /best fallback for 1080p Shorts", () => {
+    const args = buildFormatArgs({
+      mode: "video",
+      quality: "1080p",
+      urlKind: "youtube-short",
+    });
+    const fIdx = args.indexOf("-f");
+    expect(args[fIdx + 1]).toBe(
+      "bestvideo[width<=1080]+bestaudio/best[width<=1080]/best",
+    );
+  });
+
+  it("does not require mp4-only video for best Shorts quality", () => {
+    const args = buildFormatArgs({
+      mode: "video",
+      quality: "best",
+      urlKind: "youtube-short",
+    });
+    const fIdx = args.indexOf("-f");
+    expect(args[fIdx + 1]).toBe("bestvideo+bestaudio/best");
+  });
+
+  it("keeps the landscape height selector when urlKind is omitted", () => {
+    const args = buildFormatArgs({ mode: "video", quality: "1080p" });
+    const fIdx = args.indexOf("-f");
+    expect(args[fIdx + 1]).toBe(
+      "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]",
+    );
+  });
+});
+
+describe("buildJsRuntimeArgs", () => {
+  it("emits --js-runtimes kind:path when a runtime is provided", () => {
+    expect(
+      buildJsRuntimeArgs({ kind: "node", executable: "/opt/node" }),
+    ).toEqual(["--js-runtimes", "node:/opt/node"]);
+  });
+
+  it("emits nothing when no runtime is available", () => {
+    expect(buildJsRuntimeArgs(null)).toEqual([]);
+  });
+});
+
+describe("buildProbeArgs", () => {
+  it("probes Shorts with --no-playlist, a JS runtime, and a -- sentinel", () => {
+    expect(
+      buildProbeArgs({
+        url: SHORT_URL,
+        jsRuntime: { kind: "deno", executable: "/opt/deno" },
+      }),
+    ).toEqual([
+      "--dump-json",
+      "--no-download",
+      "--no-playlist",
+      "--js-runtimes",
+      "deno:/opt/deno",
+      "--",
+      SHORT_URL,
+    ]);
+  });
+});
+
+describe("buildDownloadArgv", () => {
+  it("adds Shorts format, --js-runtimes, and --no-playlist for a Shorts URL", () => {
+    const args = buildDownloadArgv({
+      url: SHORT_URL,
+      mode: "video",
+      quality: "1080p",
+      outputTemplate: "out/%(title)s.%(ext)s",
+      jsRuntime: { kind: "node", executable: "/opt/node" },
+    });
+    const fIdx = args.indexOf("-f");
+    expect(args[fIdx + 1]).toBe(
+      "bestvideo[width<=1080]+bestaudio/best[width<=1080]/best",
+    );
+    expect(args).toContain("--js-runtimes");
+    expect(args[args.indexOf("--js-runtimes") + 1]).toBe("node:/opt/node");
+    expect(args).toContain("--no-playlist");
+    expect(args.slice(-2)).toEqual(["--", SHORT_URL]);
+  });
+
+  it("does not add --no-playlist or the Shorts selector for a watch URL", () => {
+    const args = buildDownloadArgv({
+      url: WATCH_URL,
+      mode: "video",
+      quality: "1080p",
+      outputTemplate: "out/%(title)s.%(ext)s",
+      jsRuntime: null,
+    });
+    const fIdx = args.indexOf("-f");
+    expect(args[fIdx + 1]).toBe(
+      "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]",
+    );
+    expect(args).not.toContain("--no-playlist");
+    expect(args).not.toContain("--js-runtimes");
+    expect(args.slice(-2)).toEqual(["--", WATCH_URL]);
+  });
+});
+
