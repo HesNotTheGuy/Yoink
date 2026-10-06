@@ -4,7 +4,7 @@
  * out to yt-dlp so the format/subtitle/progress logic doesn't drift.
  */
 
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import os from "os";
@@ -221,6 +221,28 @@ export function buildJsRuntimeArgs(runtime: JsRuntime | null): string[] {
   return ["--js-runtimes", `${runtime.kind}:${runtime.executable}`];
 }
 
+/** True when `--help` documents `--js-runtimes`. The `--no-` form must not match. */
+export function jsRuntimesFlagSupported(helpText: string): boolean {
+  return /(?:^|\s)--js-runtimes\b/m.test(helpText);
+}
+
+let cachedJsRuntimesSupport: boolean | undefined;
+
+function ytdlpSupportsJsRuntimesFlag(): boolean {
+  if (cachedJsRuntimesSupport !== undefined) return cachedJsRuntimesSupport;
+  try {
+    const help = execFileSync(findYtdlp(), ["--help"], {
+      encoding: "utf8",
+      timeout: 5_000,
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    cachedJsRuntimesSupport = jsRuntimesFlagSupported(help);
+  } catch {
+    cachedJsRuntimesSupport = false;
+  }
+  return cachedJsRuntimesSupport;
+}
+
 function findExecutableOnPath(exe: string): string | null {
   const pathDirs = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
   for (const dir of pathDirs) {
@@ -232,6 +254,9 @@ function findExecutableOnPath(exe: string): string | null {
 
 /** Prefer deno (yt-dlp default), then node. Look beside yt-dlp, then PATH. */
 export function findJsRuntime(): JsRuntime | null {
+  // Pinned yt-dlp from before this flag exits with "no such option: --js-runtimes".
+  // seedBundledYtdlp does not overwrite an existing binary.
+  if (!ytdlpSupportsJsRuntimesFlag()) return null;
   const ytdlp = findYtdlp();
   const besideDir = path.isAbsolute(ytdlp) ? path.dirname(ytdlp) : null;
   const denoName = process.platform === "win32" ? "deno.exe" : "deno";

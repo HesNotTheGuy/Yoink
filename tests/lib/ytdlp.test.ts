@@ -6,6 +6,7 @@ import {
   buildProbeArgs,
   buildSubtitleArgs,
   buildTailArgs,
+  jsRuntimesFlagSupported,
   parseProgressLine,
   parseTitleLine,
 } from "@/lib/ytdlp";
@@ -193,6 +194,26 @@ describe("buildJsRuntimeArgs", () => {
 
   it("emits nothing when no runtime is available", () => {
     expect(buildJsRuntimeArgs(null)).toEqual([]);
+  });
+});
+
+describe("jsRuntimesFlagSupported", () => {
+  it("accepts the 2026.08.19 --help line", () => {
+    expect(
+      jsRuntimesFlagSupported(
+        "    --js-runtimes RUNTIME[:PATH]    Additional JavaScript runtime to enable,\n",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects 2025.10.22-style help that never names the flag", () => {
+    expect(
+      jsRuntimesFlagSupported("    --newline                   Output progress bar as new lines\n"),
+    ).toBe(false);
+  });
+
+  it("does not treat --no-js-runtimes as support", () => {
+    expect(jsRuntimesFlagSupported("    --no-js-runtimes\n")).toBe(false);
   });
 });
 
