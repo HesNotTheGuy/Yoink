@@ -1,8 +1,3 @@
-/**
- * Tests for lib/ytdlp.ts — pure argument builders. These are the canary
- * tests: if any of these regress, every download will break.
- */
-
 import { describe, expect, it } from "vitest";
 import {
   buildDownloadArgv,
@@ -166,7 +161,7 @@ describe("buildFormatArgs for YouTube Shorts", () => {
     });
     const fIdx = args.indexOf("-f");
     expect(args[fIdx + 1]).toBe(
-      "bestvideo[width<=1080]+bestaudio/best[width<=1080]/best",
+      "bestvideo[width<=1080][height<=1920]+bestaudio/best[width<=1080][height<=1920]/best",
     );
   });
 
@@ -231,7 +226,7 @@ describe("buildDownloadArgv", () => {
     });
     const fIdx = args.indexOf("-f");
     expect(args[fIdx + 1]).toBe(
-      "bestvideo[width<=1080]+bestaudio/best[width<=1080]/best",
+      "bestvideo[width<=1080][height<=1920]+bestaudio/best[width<=1080][height<=1920]/best",
     );
     expect(args).toContain("--js-runtimes");
     expect(args[args.indexOf("--js-runtimes") + 1]).toBe("node:/opt/node");

@@ -55,5 +55,9 @@ describe("parseInputUrl", () => {
       kind: "other",
       href: `https://www.youtube.com/shorts/${ID}Z`,
     });
+    expect(parseInputUrl(`https://www.youtube.com/shorts/${ID}/extra`)).toEqual({
+      kind: "other",
+      href: `https://www.youtube.com/shorts/${ID}/extra`,
+    });
   });
 });

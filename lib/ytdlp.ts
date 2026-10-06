@@ -141,10 +141,10 @@ const QUALITY_FORMAT_MAP: Record<string, string> = {
 // full-quality vertical stream. Cap width instead, and always fall back to /best.
 const SHORTS_QUALITY_FORMAT_MAP: Record<string, string> = {
   best:    "bestvideo+bestaudio/best",
-  "1080p": "bestvideo[width<=1080]+bestaudio/best[width<=1080]/best",
-  "720p":  "bestvideo[width<=720]+bestaudio/best[width<=720]/best",
-  "480p":  "bestvideo[width<=480]+bestaudio/best[width<=480]/best",
-  "360p":  "bestvideo[width<=360]+bestaudio/best[width<=360]/best",
+  "1080p": "bestvideo[width<=1080][height<=1920]+bestaudio/best[width<=1080][height<=1920]/best",
+  "720p":  "bestvideo[width<=720][height<=1280]+bestaudio/best[width<=720][height<=1280]/best",
+  "480p":  "bestvideo[width<=480][height<=854]+bestaudio/best[width<=480][height<=854]/best",
+  "360p":  "bestvideo[width<=360][height<=640]+bestaudio/best[width<=360][height<=640]/best",
 };
 
 export type YoutubeUrlKind = "youtube-short" | "other";
