@@ -18,6 +18,7 @@ import {
   updateYtdlp as apiUpdateYtdlp,
   type ProgressEvent as ApiProgressEvent,
 } from "@/lib/api-client";
+import { parseInputUrl } from "@/lib/youtube-url";
 
 const GUI_VERSION = "3.0.3";
 
@@ -519,6 +520,8 @@ export default function Home() {
     ? batchUrls.split("\n").some((u) => u.trim().startsWith("http"))
     : !!url.trim() && !!outputDir.trim();
 
+  const isYoutubeShort = parseInputUrl(url)?.kind === "youtube-short";
+
   return (
     <main className="max-w-3xl mx-auto px-4 py-10 space-y-8">
 
@@ -648,7 +651,7 @@ export default function Home() {
           <textarea
             value={batchUrls}
             onChange={(e) => setBatchUrls(e.target.value)}
-            placeholder={"https://youtu.be/...\nhttps://youtu.be/...\n(one URL per line)"}
+            placeholder={"https://www.youtube.com/shorts/...\nhttps://youtu.be/...\n(one URL per line)"}
             rows={5}
             className="w-full rounded-lg bg-zinc-800 border border-zinc-700 px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono"
           />
@@ -659,10 +662,15 @@ export default function Home() {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && canDownload && startDownload()}
-              placeholder="https://www.youtube.com/watch?v=… (or paste anywhere)"
+              placeholder="https://www.youtube.com/shorts/… or watch?v=… (paste anywhere)"
               className="w-full rounded-lg bg-zinc-800 border border-zinc-700 px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               suppressHydrationWarning
             />
+            {isYoutubeShort && (
+              <p className="text-xs text-zinc-400">
+                YouTube Short detected. It downloads through the same video flow as a normal YouTube link.
+              </p>
+            )}
 
             {/* Video preview */}
             {(infoLoading || videoInfo || infoError) && (
@@ -683,6 +691,7 @@ export default function Home() {
                     <p className="text-xs text-zinc-400">
                       {videoInfo.uploader}
                       {videoInfo.duration ? ` · ${formatDuration(videoInfo.duration)}` : ""}
+                      {isYoutubeShort ? " · Short" : ""}
                     </p>
                   </div>
                 )}
