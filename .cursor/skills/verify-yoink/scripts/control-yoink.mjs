@@ -18,20 +18,22 @@ function die(message, code = 1) {
   process.exit(code);
 }
 
+function readPkgName(pkgPath) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    return typeof pkg.name === "string" ? pkg.name : null;
+  } catch {
+    return null;
+  }
+}
+
 function findRepoRoot() {
   const starts = [process.cwd(), path.resolve(SKILL_DIR, "..", "..", "..")];
   for (const start of starts) {
     let dir = start;
     for (;;) {
       const pkgPath = path.join(dir, "package.json");
-      if (fs.existsSync(pkgPath)) {
-        try {
-          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-          if (pkg.name === "yoink") return dir;
-        } catch {
-          /* keep walking */
-        }
-      }
+      if (fs.existsSync(pkgPath) && readPkgName(pkgPath) === "yoink") return dir;
       const parent = path.dirname(dir);
       if (parent === dir) break;
       dir = parent;
@@ -75,8 +77,17 @@ function pidAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err.code === "ESRCH") return false;
+    return true;
+  }
+}
+
+function signalProcess(pid, signal) {
+  try {
+    process.kill(pid, signal);
+  } catch (err) {
+    if (err.code !== "ESRCH") throw err;
   }
 }
 
@@ -88,12 +99,9 @@ function killTree(pid) {
   }
   try {
     process.kill(-pid, "SIGTERM");
-  } catch {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      /* already gone */
-    }
+  } catch (err) {
+    if (err.code !== "ESRCH") throw err;
+    signalProcess(pid, "SIGTERM");
   }
 }
 
@@ -103,12 +111,9 @@ async function waitForDeath(pid, ms = 5000) {
   if (pidAlive(pid) && process.platform !== "win32") {
     try {
       process.kill(-pid, "SIGKILL");
-    } catch {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        /* already gone */
-      }
+    } catch (err) {
+      if (err.code !== "ESRCH") throw err;
+      signalProcess(pid, "SIGKILL");
     }
   }
 }
@@ -383,11 +388,7 @@ class Cdp {
   }
 
   close() {
-    try {
-      this.ws.close();
-    } catch {
-      /* ignore */
-    }
+    this.ws.close();
   }
 }
 
