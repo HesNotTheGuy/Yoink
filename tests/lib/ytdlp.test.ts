@@ -231,6 +231,8 @@ describe("buildDownloadArgv", () => {
     expect(args).toContain("--js-runtimes");
     expect(args[args.indexOf("--js-runtimes") + 1]).toBe("node:/opt/node");
     expect(args).toContain("--no-playlist");
+    expect(args).toContain("--progress");
+    expect(args).toContain("--print");
     expect(args.slice(-2)).toEqual(["--", SHORT_URL]);
   });
 
@@ -248,6 +250,7 @@ describe("buildDownloadArgv", () => {
     );
     expect(args).not.toContain("--no-playlist");
     expect(args).not.toContain("--js-runtimes");
+    expect(args).toContain("--progress");
     expect(args.slice(-2)).toEqual(["--", WATCH_URL]);
   });
 });

@@ -306,9 +306,11 @@ export function buildDownloadArgv(opts: BuildDownloadArgvInput): string[] {
       speedLimit: opts.speedLimit,
       outputTemplate: opts.outputTemplate,
     }),
+    // `--print` implies `--quiet`, which hides `[download]` percent lines the UI parses.
     "--print",
     "after_move:[YOINK_PATH]%(filepath)s",
     "--no-simulate",
+    "--progress",
     "--",
     opts.url,
   ];
