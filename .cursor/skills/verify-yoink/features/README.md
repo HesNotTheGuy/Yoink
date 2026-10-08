@@ -42,6 +42,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 
 - [Paste URL and download](./download.md) covers single URL download, batch mode, progress, and history write.
 - [Format picker](./format-picker.md) covers quality, mode, and the per-URL format list.
+- [Vertical short-path URL](./vertical-url.md) covers the short-path hint, width-capped format selector, and conditional `--js-runtimes`.
 - [Download history](./history.md) covers the history drawer, empty state, re-use, and clear.
 - [Settings and themes](./settings.md) covers the settings drawer, theme buttons, and persisted defaults.
 - [Trim, cut, and audio clipper](./editors.md) covers `/edit`, `/cut`, and `/audio` after a completed download.

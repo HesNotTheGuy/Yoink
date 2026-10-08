@@ -24,7 +24,7 @@ Preconditions:
 - Batch mode is off. The main URL field is visible.
 - A public sample URL can resolve. If info fails, stop and report unreachable.
 
-- **Enter URL.** Fill the sample URL. Run `node .cursor/skills/verify-yoink/scripts/control-yoink.mjs fill --placeholder "https://www.youtube.com/watch?v=…" --value "https://www.youtube.com/watch?v=jNQXAC9IVRw"`.
+- **Enter URL.** Fill the sample URL. Run `node .cursor/skills/verify-yoink/scripts/control-yoink.mjs fill --label "URL" --value "https://www.youtube.com/watch?v=jNQXAC9IVRw"`.
 - **Wait for Format.** Wait for the Format label. Run `node .cursor/skills/verify-yoink/scripts/control-yoink.mjs wait --text "Best quality (auto)" --timeout 30000`. The Format select is visible.
 - **Select auto.** Confirm the default option. Run `node .cursor/skills/verify-yoink/scripts/control-yoink.mjs eval --js "document.querySelector('select').options[0].textContent"`. The first option is `Best quality (auto)`.
 - **Switch to audio.** Choose **Audio (MP3)**. Run `node .cursor/skills/verify-yoink/scripts/control-yoink.mjs click --text "Audio (MP3)"`. Quality disappears. Mode stays Audio (MP3).
@@ -33,7 +33,7 @@ Preconditions:
 
 ## Gotchas
 
-- Format does not render until formats load. An invalid URL shows `Could not load video info` and no Format select.
+- Format does not render until formats load. An invalid URL shows `Could not load video info` and no Format select. A site bot-check or `LOGIN_REQUIRED` is an environment limit; do not treat that skip as proof of the Format dropdown.
 - Clicking **Video** can match the heading in history rows that contain the word video. Use `--exact` on the main window.
 - Audio (MP3) needs ffmpeg. Proving a completed audio download is a download-feature concern, not this picker.
 - Changing the URL resets the selected format to auto.

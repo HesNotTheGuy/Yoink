@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = path.resolve(SCRIPT_DIR, "..");
@@ -433,13 +433,42 @@ function fillScript({ placeholder, label, value }) {
     const value = ${valueJs};
     const placeholder = ${placeholderJs};
     const labelText = ${labelJs};
+    const norm = (s) => (s || "").replace(/\\s+/g, " ").trim();
+    const fieldsOf = (root) => [...root.querySelectorAll("input, textarea, select")];
     let el = null;
     if (labelText) {
-      const labels = [...document.querySelectorAll("label")];
-      const lab = labels.find((n) => (n.textContent || "").replace(/\\s+/g, " ").trim() === labelText);
-      if (!lab) throw new Error("No label " + JSON.stringify(labelText));
-      const root = lab.parentElement || document;
-      el = root.querySelector("input, textarea, select");
+      el = fieldsOf(document).find((n) => norm(n.getAttribute("aria-label")) === labelText) || null;
+      if (!el && labelText === "URL") {
+        el = document.querySelector('input[type="url"]');
+      }
+      if (!el) {
+        const lab = [...document.querySelectorAll("label")].find((n) => norm(n.textContent) === labelText);
+        if (lab) {
+          const forId = lab.getAttribute("for");
+          if (forId) el = document.getElementById(forId);
+          if (!el) el = (lab.parentElement || document).querySelector("input, textarea, select");
+        }
+      }
+      if (!el) {
+        const cap = [...document.querySelectorAll("span, p, legend, dt, h1, h2, h3, h4, h5, h6")].find(
+          (n) => n.children.length === 0 && norm(n.textContent) === labelText
+        );
+        if (cap) {
+          let root = cap.parentElement;
+          while (root && root !== document.body) {
+            const following = fieldsOf(root).find(
+              (n) => !!(cap.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING)
+            );
+            if (following) {
+              el = following;
+              break;
+            }
+            if (root.tagName === "MAIN") break;
+            root = root.parentElement;
+          }
+        }
+      }
+      if (!el) throw new Error("No field labelled " + JSON.stringify(labelText));
     } else if (placeholder) {
       el = [...document.querySelectorAll("input, textarea")].find((n) =>
         (n.getAttribute("placeholder") || "").includes(placeholder)
@@ -758,6 +787,114 @@ async function cmdHistoryFile() {
   printJsonFile(path.join(state.dataDir, "history.json"));
 }
 
+function scrubArgvToken(token) {
+  return String(token)
+    .replace(/\/home\/[^/]+/g, "<home>")
+    .replace(/\\Users\\[^\\]+/gi, "<home>")
+    .replace(/\/tmp\/yoink-verify-[^/]+/g, "<isolated>");
+}
+
+function resolveYtdlpBin(repoRoot) {
+  const name = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+  const state = readState();
+  const candidates = [];
+  if (state && state.dataDir) candidates.push(path.join(state.dataDir, name));
+  candidates.push(path.join(repoRoot, "electron", "resources", name));
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+async function loadArgvBuilders(repoRoot) {
+  const esbuildPath = path.join(repoRoot, "node_modules", "esbuild", "lib", "main.js");
+  if (!fs.existsSync(esbuildPath)) die("argv needs esbuild. Run npm install from the repo root.");
+  const esbuild = await import(pathToFileURL(esbuildPath).href);
+  const outfile = path.join(os.tmpdir(), `yoink-verify-argv-${process.pid}.mjs`);
+  await esbuild.build({
+    stdin: {
+      contents: `export { buildDownloadArgv, jsRuntimesFlagSupported } from ${JSON.stringify(
+        path.join(repoRoot, "lib/ytdlp.ts")
+      )};
+export { parseInputUrl } from ${JSON.stringify(path.join(repoRoot, "lib/youtube-url.ts"))};`,
+      resolveDir: repoRoot,
+      sourcefile: "yoink-argv-entry.ts",
+      loader: "ts",
+    },
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    outfile,
+    packages: "external",
+    alias: {
+      "@": repoRoot,
+    },
+  });
+  return { mod: await import(pathToFileURL(outfile).href + "?t=" + Date.now()), outfile };
+}
+
+async function cmdArgv(flags) {
+  const url = flags.url;
+  if (!url) die("argv requires --url");
+  const repoRoot = findRepoRoot();
+  const quality = String(flags.quality || "1080p");
+  const mode = String(flags.mode || "video");
+  const loaded = await loadArgvBuilders(repoRoot);
+  try {
+    const { buildDownloadArgv, jsRuntimesFlagSupported, parseInputUrl } = loaded.mod;
+    const withRuntime = buildDownloadArgv({
+      url,
+      mode,
+      quality,
+      outputTemplate: "out/%(title)s.%(ext)s",
+      jsRuntime: { kind: "node", executable: "/opt/node" },
+    });
+    const noRuntime = buildDownloadArgv({
+      url,
+      mode,
+      quality,
+      outputTemplate: "out/%(title)s.%(ext)s",
+      jsRuntime: null,
+    });
+    let helpListsJsRuntimes = null;
+    const bin = resolveYtdlpBin(repoRoot);
+    if (bin) {
+      try {
+        const help = execFileSync(bin, ["--help"], {
+          encoding: "utf8",
+          timeout: 8000,
+          maxBuffer: 2 * 1024 * 1024,
+        });
+        helpListsJsRuntimes = jsRuntimesFlagSupported(help);
+      } catch {
+        helpListsJsRuntimes = null;
+      }
+    }
+    const format = withRuntime[withRuntime.indexOf("-f") + 1] || null;
+    const parsed = parseInputUrl(url);
+    console.log(
+      JSON.stringify(
+        {
+          urlKind: parsed && parsed.kind ? parsed.kind : null,
+          format,
+          widthCapped: typeof format === "string" && format.includes("width<="),
+          heightCapped: typeof format === "string" && format.includes("height<=") && !format.includes("width<="),
+          helpListsJsRuntimes,
+          hasJsRuntimesWhenRuntimePassed: withRuntime.includes("--js-runtimes"),
+          hasJsRuntimesWhenRuntimeNull: noRuntime.includes("--js-runtimes"),
+          hasProgress: withRuntime.includes("--progress"),
+          hasPrint: withRuntime.includes("--print"),
+          argsWithoutRuntime: noRuntime.map(scrubArgvToken),
+        },
+        null,
+        2
+      )
+    );
+  } finally {
+    fs.rmSync(loaded.outfile, { force: true });
+  }
+}
+
 async function cmdCleanup(flags, opts = {}) {
   const state = readState();
   if (!state) {
@@ -802,6 +939,7 @@ Commands:
   snapshot --path FILE
   settings-file
   history-file
+  argv --url URL [--quality Q] [--mode video|audio]
   cleanup [--keep-scratch]
 `;
 
@@ -819,6 +957,7 @@ try {
   else if (command === "snapshot") await cmdSnapshot(flags);
   else if (command === "settings-file") await cmdSettingsFile();
   else if (command === "history-file") await cmdHistoryFile();
+  else if (command === "argv") await cmdArgv(flags);
   else if (command === "cleanup") await cmdCleanup(flags);
   else die(USAGE);
 } catch (err) {

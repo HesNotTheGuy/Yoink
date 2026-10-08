@@ -61,7 +61,7 @@ All GUI actions go through `control-yoink`. Prefer visible names from `app/page.
 ```bash
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs click --text "History"
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs click --text "⚙ Settings" --exact
-node .cursor/skills/verify-yoink/scripts/control-yoink.mjs fill --placeholder "https://www.youtube.com/watch?v=…" --value "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+node .cursor/skills/verify-yoink/scripts/control-yoink.mjs fill --label "URL" --value "https://www.youtube.com/watch?v=jNQXAC9IVRw"
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs fill --label "Default Output Folder" --value "/tmp/yoink-verify-settings-theme/Downloads"
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs wait --text "Download History"
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs eval --js "localStorage.getItem('theme')"
@@ -73,15 +73,16 @@ Stable handles from the main window:
 
 - Heading `Yoink`
 - Buttons `History`, `⚙ Settings`, `Batch mode`, `Video`, `Audio (MP3)`, `Browse`, `Download`
-- Placeholder `https://www.youtube.com/watch?v=… (or paste anywhere)`
-- Labels `Format`, `Mode`, `Quality`, `Output Folder`
+- URL field: fill with `--label "URL"` (visible caption, or `input[type="url"]`). Do not fill by placeholder text; that string is not a stable handle.
+- Labels `URL`, `Format`, `Mode`, `Quality`, `Output Folder`
 - After a URL resolves, format option `Best quality (auto)`
+- Short-path hint copy starting `YouTube Short detected` when the URL field holds a `/shorts/<id>` path
 - Settings drawer heading `Settings`, theme buttons `Slate`, `Terminal`, `Glass`, `Minimal`, `Neon Noir`, `Brutalist`, then `Save Settings`
 - History drawer heading `Download History`, empty copy `No downloads yet`, row actions `Re-use`, `Edit`, `Clear all`
 
 The Download button stays disabled until the URL field is non-empty and Output Folder is non-empty. Default output is the isolated `Downloads` directory after launch because `electron/ipc/_data.ts` joins `os.homedir()` with `Downloads`.
 
-Info and format lists wait 800 ms after the last URL change (`app/page.tsx`). Wait for the preview title or `Could not load video info` before asserting formats.
+Info and format lists wait 800 ms after the last URL change (`app/page.tsx`). Wait for the preview title or `Could not load video info` before asserting formats. A site bot-check or `LOGIN_REQUIRED` is an environment limit, not a failing proof — record it and use argv/unit-level proof for format selectors.
 
 `wait --text` matches `document.body.innerText` and ignores letter case. Labels such as Color Theme render as COLOR THEME because of CSS `uppercase`.
 
@@ -119,7 +120,9 @@ Do not `pkill electron` or `pkill next`. After a failed iteration, run cleanup b
 ```bash
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs launch --run-id settings-theme
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs doctor
+node .cursor/skills/verify-yoink/scripts/control-yoink.mjs fill --label "URL" --value "https://www.youtube.com/watch?v=jNQXAC9IVRw"
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs click --text "⚙ Settings" --exact
+node .cursor/skills/verify-yoink/scripts/control-yoink.mjs argv --url "https://www.youtube.com/shorts/AAAAAAAAAAA" --quality 1080p
 node .cursor/skills/verify-yoink/scripts/control-yoink.mjs cleanup
 ```
 
