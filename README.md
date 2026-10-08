@@ -11,7 +11,6 @@ Also includes a [**browser extension**](extension/) (Chrome / Firefox / Edge / B
 ## Features
 
 - **Video & audio downloads** — MP4 or MP3, with quality selection (Best, 1080p, 720p, 480p, 360p)
-- **YouTube Shorts** — paste `youtube.com/shorts/...` the same way as a watch URL
 - **Batch mode** — paste multiple URLs at once
 - **Real-time progress** — live progress bar, speed, and ETA per download
 - **Format picker** — inspect available formats before downloading
