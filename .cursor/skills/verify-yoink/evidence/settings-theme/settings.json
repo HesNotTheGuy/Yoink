@@ -1,0 +1,9 @@
+{
+  "outputDir": "/tmp/yoink-verify-settings-theme/Downloads",
+  "defaultMode": "audio",
+  "defaultQuality": "best",
+  "embedMetadata": true,
+  "embedThumbnail": true,
+  "cookiesFile": "",
+  "speedLimit": ""
+}
