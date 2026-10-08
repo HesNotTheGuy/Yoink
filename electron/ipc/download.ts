@@ -17,9 +17,7 @@ import { spawn, type ChildProcess } from "child_process";
 import path from "path";
 import {
   findYtdlp,
-  buildFormatArgs,
-  buildSubtitleArgs,
-  buildTailArgs,
+  buildDownloadArgv,
   parseProgressLine,
   parseTitleLine,
   type SubtitleOptions,
@@ -152,29 +150,23 @@ export function register(ipcMain: IpcMain): void {
       // findFfmpeg() resolved an absolute path; the bare-name PATH fallback
       // is left to yt-dlp's own PATH search.
       const ffmpegPath = findFfmpeg();
-      const ffmpegArgs = path.isAbsolute(ffmpegPath)
-        ? ["--ffmpeg-location", path.dirname(ffmpegPath)]
-        : [];
+      const ffmpegLocation = path.isAbsolute(ffmpegPath)
+        ? path.dirname(ffmpegPath)
+        : undefined;
 
-      const args = [
-        ...buildFormatArgs({ mode, quality, formatId, embedMetadata, embedThumbnail }),
-        ...buildSubtitleArgs(subtitles, mode),
-        ...ffmpegArgs,
-        ...buildTailArgs({
-          cookiesFile,
-          speedLimit,
-          outputTemplate: path.join(outputDir, "%(title)s.%(ext)s"),
-        }),
-        // Capture the FINAL output path after any post-processing move.
-        // --no-simulate ensures --print doesn't suppress the download.
-        "--print",
-        "after_move:[YOINK_PATH]%(filepath)s",
-        "--no-simulate",
-        // `--` terminates option parsing so a URL beginning with `-` can't
-        // be interpreted as a yt-dlp flag.
-        "--",
+      const args = buildDownloadArgv({
         url,
-      ];
+        mode,
+        quality,
+        formatId,
+        embedMetadata,
+        embedThumbnail,
+        cookiesFile,
+        speedLimit,
+        subtitles,
+        outputTemplate: path.join(outputDir, "%(title)s.%(ext)s"),
+        ffmpegLocation,
+      });
 
       const proc = spawn(findYtdlp(), args);
       active.set(id, proc);
