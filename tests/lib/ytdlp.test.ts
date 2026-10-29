@@ -7,8 +7,12 @@ import {
   buildSubtitleArgs,
   buildTailArgs,
   jsRuntimesFlagSupported,
+  parseDottedVersion,
   parseProgressLine,
   parseTitleLine,
+  selectJsRuntime,
+  versionAtLeast,
+  ytdlpProcessEnv,
 } from "@/lib/ytdlp";
 
 describe("buildFormatArgs", () => {
@@ -182,6 +186,55 @@ describe("buildFormatArgs for YouTube Shorts", () => {
     expect(args[fIdx + 1]).toBe(
       "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]",
     );
+  });
+});
+
+describe("selectJsRuntime", () => {
+  it("uses Deno 2.3 or newer ahead of Node", () => {
+    const picked = selectJsRuntime({
+      deno: { executable: "/opt/deno", versionText: "deno 2.3.0\n" },
+      node: { executable: "/opt/node", versionText: "v24.22.1" },
+      electronNode: { executable: "/opt/electron", versionText: "v24.22.1" },
+    });
+    expect(picked).toEqual({ kind: "deno", executable: "/opt/deno" });
+  });
+
+  it("skips Deno and Node that are too old and uses Electron's Node", () => {
+    const picked = selectJsRuntime({
+      deno: { executable: "/opt/deno", versionText: "deno 2.2.9" },
+      node: { executable: "/opt/node", versionText: "v20.18.0" },
+      electronNode: { executable: "/opt/Yoink.exe", versionText: "v24.22.1" },
+    });
+    expect(picked).toEqual({
+      kind: "node",
+      executable: "/opt/Yoink.exe",
+      electronAsNode: true,
+    });
+  });
+
+  it("returns null when every candidate is missing or too old", () => {
+    expect(
+      selectJsRuntime({
+        deno: null,
+        node: { executable: "/opt/node", versionText: "v20.0.0" },
+        electronNode: { executable: "/opt/electron", versionText: "not a version" },
+      })
+    ).toBeNull();
+    expect(parseDottedVersion("no digits here")).toBeNull();
+    expect(versionAtLeast([22, 0, 0], [22, 0, 0])).toBe(true);
+    expect(versionAtLeast([21, 9, 9], [22, 0, 0])).toBe(false);
+  });
+
+  it("sets ELECTRON_RUN_AS_NODE only for the Electron binary", () => {
+    const electronEnv = ytdlpProcessEnv({
+      kind: "node",
+      executable: "/opt/electron",
+      electronAsNode: true,
+    });
+    expect(electronEnv.ELECTRON_RUN_AS_NODE).toBe("1");
+    expect(electronEnv).not.toBe(process.env);
+    expect(ytdlpProcessEnv({ kind: "node", executable: "/opt/node" })).toBe(process.env);
+    expect(ytdlpProcessEnv(null)).toBe(process.env);
   });
 });
 

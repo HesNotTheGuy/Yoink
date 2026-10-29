@@ -83,10 +83,11 @@ export async function dumpJson(url: string, timeout = 30_000): Promise<Record<st
     throw new Error("yt-dlp not found. Click 'Update yt-dlp' or reinstall Yoink.");
   }
 
+  const runtime = findJsRuntime();
   const { stdout } = await execFileAsync(
     findYtdlp(),
-    buildProbeArgs({ url }),
-    { timeout, maxBuffer: 32 * 1024 * 1024 }
+    buildProbeArgs({ url, jsRuntime: runtime }),
+    { timeout, maxBuffer: 32 * 1024 * 1024, env: ytdlpProcessEnv(runtime) }
   );
 
   // yt-dlp can print warning lines on stdout before the JSON payload, so we
@@ -214,7 +215,74 @@ export function buildTailArgs(opts: { cookiesFile?: string; speedLimit?: string;
   return args;
 }
 
-export type JsRuntime = { kind: "deno" | "node"; executable: string };
+export type JsRuntime = {
+  kind: "deno" | "node";
+  executable: string;
+  /**
+   * The executable is the Electron binary. yt-dlp must be spawned with
+   * ELECTRON_RUN_AS_NODE=1 so the child it starts behaves as Node.
+   */
+  electronAsNode?: boolean;
+};
+
+/** Current yt-dlp rejects Deno older than this for challenge scripts. */
+export const MIN_DENO_FOR_YTDLP = [2, 3, 0] as const;
+/** Current yt-dlp rejects Node older than this for challenge scripts. */
+export const MIN_NODE_FOR_YTDLP = [22, 0, 0] as const;
+
+export interface RuntimeCandidate {
+  executable: string;
+  versionText: string;
+}
+
+/** First x.y.z in a `--version` string, or null when none is present. */
+export function parseDottedVersion(text: string): number[] | null {
+  const match = /(\d+)\.(\d+)\.(\d+)/.exec(text);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+export function versionAtLeast(version: readonly number[], minimum: readonly number[]): boolean {
+  for (let i = 0; i < minimum.length; i++) {
+    const part = version[i] ?? 0;
+    const min = minimum[i] ?? 0;
+    if (part > min) return true;
+    if (part < min) return false;
+  }
+  return true;
+}
+
+/**
+ * Pick a runtime current yt-dlp will actually use. Deno is preferred.
+ * A Node binary older than 22 is ignored. Electron's own Node is the
+ * fallback when nothing else qualifies, because a normal install does
+ * not ship Deno or a separate Node.
+ */
+export function selectJsRuntime(input: {
+  deno: RuntimeCandidate | null;
+  node: RuntimeCandidate | null;
+  electronNode: RuntimeCandidate | null;
+}): JsRuntime | null {
+  const denoVersion = input.deno ? parseDottedVersion(input.deno.versionText) : null;
+  if (input.deno && denoVersion && versionAtLeast(denoVersion, MIN_DENO_FOR_YTDLP)) {
+    return { kind: "deno", executable: input.deno.executable };
+  }
+  const nodeVersion = input.node ? parseDottedVersion(input.node.versionText) : null;
+  if (input.node && nodeVersion && versionAtLeast(nodeVersion, MIN_NODE_FOR_YTDLP)) {
+    return { kind: "node", executable: input.node.executable };
+  }
+  const electronVersion = input.electronNode ? parseDottedVersion(input.electronNode.versionText) : null;
+  if (input.electronNode && electronVersion && versionAtLeast(electronVersion, MIN_NODE_FOR_YTDLP)) {
+    return { kind: "node", executable: input.electronNode.executable, electronAsNode: true };
+  }
+  return null;
+}
+
+/** Environment for a yt-dlp child. Electron-as-Node must be inherited by the runtime yt-dlp spawns. */
+export function ytdlpProcessEnv(runtime: JsRuntime | null): NodeJS.ProcessEnv {
+  if (!runtime?.electronAsNode) return process.env;
+  return { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
+}
 
 export function buildJsRuntimeArgs(runtime: JsRuntime | null): string[] {
   if (!runtime) return [];
@@ -252,31 +320,65 @@ function findExecutableOnPath(exe: string): string | null {
   return null;
 }
 
-/** Prefer deno (yt-dlp default), then node. Look beside yt-dlp, then PATH. */
+function runtimeVersionText(executable: string, env?: NodeJS.ProcessEnv): string | null {
+  try {
+    return execFileSync(executable, ["--version"], {
+      encoding: "utf8",
+      timeout: 5_000,
+      maxBuffer: 1024 * 1024,
+      env,
+      windowsHide: true,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function firstExisting(candidates: Array<string | null>): string | null {
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Prefer a new enough Deno, then a new enough Node, then Electron's Node.
+ * Look beside yt-dlp, then on PATH. A pinned yt-dlp from before
+ * `--js-runtimes` gets no runtime flag: seedBundledYtdlp does not
+ * overwrite an existing binary, and that flag would make it exit 2.
+ */
 export function findJsRuntime(): JsRuntime | null {
-  // Pinned yt-dlp from before this flag exits with "no such option: --js-runtimes".
-  // seedBundledYtdlp does not overwrite an existing binary.
   if (!ytdlpSupportsJsRuntimesFlag()) return null;
   const ytdlp = findYtdlp();
   const besideDir = path.isAbsolute(ytdlp) ? path.dirname(ytdlp) : null;
   const denoName = process.platform === "win32" ? "deno.exe" : "deno";
   const nodeName = process.platform === "win32" ? "node.exe" : "node";
 
-  if (besideDir) {
-    const denoBeside = path.join(besideDir, denoName);
-    if (fs.existsSync(denoBeside)) return { kind: "deno", executable: denoBeside };
-  }
-  const denoOnPath = findExecutableOnPath(denoName);
-  if (denoOnPath) return { kind: "deno", executable: denoOnPath };
+  const denoPath = firstExisting([
+    besideDir ? path.join(besideDir, denoName) : null,
+    findExecutableOnPath(denoName),
+  ]);
+  const nodePath = firstExisting([
+    besideDir ? path.join(besideDir, nodeName) : null,
+    findExecutableOnPath(nodeName),
+  ]);
+  const denoVersion = denoPath ? runtimeVersionText(denoPath) : null;
+  const nodeVersion = nodePath ? runtimeVersionText(nodePath) : null;
 
-  if (besideDir) {
-    const nodeBeside = path.join(besideDir, nodeName);
-    if (fs.existsSync(nodeBeside)) return { kind: "node", executable: nodeBeside };
+  let electronNode: RuntimeCandidate | null = null;
+  if (process.versions.electron) {
+    const versionText = runtimeVersionText(process.execPath, {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+    });
+    if (versionText) electronNode = { executable: process.execPath, versionText };
   }
-  const nodeOnPath = findExecutableOnPath(nodeName);
-  if (nodeOnPath) return { kind: "node", executable: nodeOnPath };
 
-  return null;
+  return selectJsRuntime({
+    deno: denoPath && denoVersion ? { executable: denoPath, versionText: denoVersion } : null,
+    node: nodePath && nodeVersion ? { executable: nodePath, versionText: nodeVersion } : null,
+    electronNode,
+  });
 }
 
 export function buildProbeArgs(opts: { url: string; jsRuntime?: JsRuntime | null }): string[] {

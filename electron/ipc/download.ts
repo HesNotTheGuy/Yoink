@@ -17,9 +17,11 @@ import { spawn, type ChildProcess } from "child_process";
 import path from "path";
 import {
   findYtdlp,
+  findJsRuntime,
   buildDownloadArgv,
   parseProgressLine,
   parseTitleLine,
+  ytdlpProcessEnv,
   type SubtitleOptions,
 } from "@/lib/ytdlp";
 import { findFfmpeg } from "@/lib/ffmpeg";
@@ -154,6 +156,7 @@ export function register(ipcMain: IpcMain): void {
         ? path.dirname(ffmpegPath)
         : undefined;
 
+      const jsRuntime = findJsRuntime();
       const args = buildDownloadArgv({
         url,
         mode,
@@ -166,9 +169,10 @@ export function register(ipcMain: IpcMain): void {
         subtitles,
         outputTemplate: path.join(outputDir, "%(title)s.%(ext)s"),
         ffmpegLocation,
+        jsRuntime,
       });
 
-      const proc = spawn(findYtdlp(), args);
+      const proc = spawn(findYtdlp(), args, { env: ytdlpProcessEnv(jsRuntime) });
       active.set(id, proc);
       activeProcs.add(proc);
 
