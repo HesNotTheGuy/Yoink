@@ -31,7 +31,7 @@ const common = {
   bundle: true,
   platform: "node",
   format: "cjs",
-  target: "node20",
+  target: "node24",
   sourcemap: true,
   // `electron` is provided by the Electron runtime - don't bundle it.
   // Node built-ins (fs, path, child_process, etc.) are auto-external on

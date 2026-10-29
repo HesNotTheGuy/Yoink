@@ -1,10 +1,13 @@
 /**
  * ytdlp lifecycle IPC handlers — check for and apply updates.
  *
- * Update strategy: download the latest yt-dlp.exe directly into
+ * Update strategy: download the latest yt-dlp binary directly into
  * %APPDATA%\Yoink\ (a user-writable location). findYtdlp() already
  * checks that path first, so the freshly-downloaded binary takes
- * priority over any system-PATH copy on the next call.
+ * priority over any system-PATH copy on the next call. The download
+ * is checked against that release's SHA2-256SUMS before it replaces
+ * the installed binary. A missing checksum or a mismatch leaves the
+ * previous binary in place.
  *
  * Why NOT `yt-dlp -U`: it relies on yt-dlp being able to overwrite
  * itself in place. That fails when yt-dlp lives in a non-writable
@@ -17,35 +20,11 @@
  */
 
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
-import fs from "fs";
 import path from "path";
 import os from "os";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { getYtdlpVersion } from "@/lib/ytdlp";
+import { assetNameForPlatform, downloadVerifiedYtdlp } from "@/lib/ytdlp-integrity.mjs";
 import { activeDownloadCount } from "./download";
-
-/**
- * Retries a synchronous fs operation that can transiently fail on Windows
- * when antivirus / the search indexer briefly locks a freshly written .exe.
- * Retries only the lock-class errno codes; anything else rethrows immediately.
- */
-function retryFsSync<T>(fn: () => T, attempts = 5, delayMs = 150): T {
-  for (let i = 0; ; i++) {
-    try {
-      return fn();
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      const transient = code === "EBUSY" || code === "EPERM" || code === "EACCES";
-      if (!transient || i >= attempts - 1) throw err;
-      // Synchronous spin-wait: this runs in the update handler off the
-      // render path, and a short blocking pause is simpler than threading
-      // async through the rename. Total worst-case wait is attempts*delayMs.
-      const until = Date.now() + delayMs;
-      while (Date.now() < until) { /* busy-wait briefly */ }
-    }
-  }
-}
 
 interface CheckUpdateResult {
   current: string;
@@ -59,14 +38,6 @@ function getDataDir(): string {
   }
   return path.join(os.homedir(), ".yoink");
 }
-
-function getYtdlpFilename(): string {
-  return process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
-}
-
-const YTDLP_URL = process.platform === "win32"
-  ? "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
-  : "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
 
 export function register(ipcMain: IpcMain): void {
   ipcMain.handle("ytdlp:check-update", async (): Promise<CheckUpdateResult> => {
@@ -125,81 +96,30 @@ export function register(ipcMain: IpcMain): void {
       }
 
       const dataDir = getDataDir();
-      const targetPath = path.join(dataDir, getYtdlpFilename());
-      const tempPath = `${targetPath}.download`;
+      const assetName = assetNameForPlatform();
+      const targetPath = path.join(dataDir, assetName);
 
       try {
-        if (!fs.existsSync(dataDir)) {
-          fs.mkdirSync(dataDir, { recursive: true });
-        }
-
-        send({ type: "log", text: `Downloading latest yt-dlp from GitHub...` });
-        send({ type: "log", text: `  ${YTDLP_URL}` });
-
-        const res = await fetch(YTDLP_URL, { redirect: "follow" });
-        if (!res.ok) {
-          send({ type: "error", message: `Download failed: HTTP ${res.status} ${res.statusText}` });
-          return;
-        }
-        if (!res.body) {
-          send({ type: "error", message: "Download failed: no response body" });
-          return;
-        }
-
-        // Stream to a .download tempfile, then move into place. Use
-        // stream/promises pipeline so a mid-stream write error (disk full,
-        // I/O fault, AV lock) rejects cleanly into the catch below instead
-        // of throwing as an uncaught exception that crashes the main
-        // process and skips temp cleanup. A pass-through counts bytes for
-        // the progress log.
-        const contentLength = Number(res.headers.get("content-length") ?? 0);
-        let received = 0;
         let lastReported = 0;
-        const progress = new Transform({
-          transform(chunk: Buffer, _enc, cb) {
-            received += chunk.length;
-            if (received - lastReported >= 2 * 1024 * 1024) {
-              lastReported = received;
-              const mb = (received / 1024 / 1024).toFixed(1);
-              const total = contentLength ? ` / ${(contentLength / 1024 / 1024).toFixed(1)} MB` : "";
-              send({ type: "log", text: `  ${mb} MB${total}` });
-            }
-            cb(null, chunk);
+        const release = await downloadVerifiedYtdlp({
+          dest: targetPath,
+          assetName,
+          onStatus: (message) => send({ type: "log", text: message }),
+          onProgress: (received, total) => {
+            if (received - lastReported < 2 * 1024 * 1024 && received !== total) return;
+            lastReported = received;
+            const mb = (received / 1024 / 1024).toFixed(1);
+            const ofTotal = total ? ` / ${(total / 1024 / 1024).toFixed(1)} MB` : "";
+            send({ type: "log", text: `  ${mb} MB${ofTotal}` });
           },
         });
 
-        await pipeline(
-          Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
-          progress,
-          fs.createWriteStream(tempPath)
-        );
-
-        // Guard against a silently-truncated download (connection dropped on
-        // a chunked response that undici can't length-check). If the server
-        // advertised a length, the file must match it before we install.
-        if (contentLength > 0) {
-          const got = fs.statSync(tempPath).size;
-          if (got !== contentLength) {
-            throw new Error(`incomplete download (${got} of ${contentLength} bytes)`);
-          }
-        }
-
-        // Move into place. unlink + rename can transiently fail on Windows
-        // when AV / the indexer briefly locks the freshly written .exe, so
-        // retry the lock-class errors a few times before giving up.
-        retryFsSync(() => {
-          if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
-          fs.renameSync(tempPath, targetPath);
+        send({
+          type: "log",
+          text: `Installed yt-dlp ${release.tag} to ${targetPath}`,
         });
-
-        const sizeMB = (fs.statSync(targetPath).size / 1024 / 1024).toFixed(1);
-        send({ type: "log", text: `Installed to ${targetPath} (${sizeMB} MB)` });
         send({ type: "done", message: "yt-dlp updated successfully!" });
       } catch (err) {
-        // Clean up partial download
-        if (fs.existsSync(tempPath)) {
-          try { fs.unlinkSync(tempPath); } catch { /* ignore */ }
-        }
         const code = (err as NodeJS.ErrnoException).code;
         const message =
           code === "EBUSY" || code === "EPERM" || code === "EACCES"
