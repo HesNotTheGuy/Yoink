@@ -1,6 +1,6 @@
 # From source
 
-Node.js 18+. yt-dlp and FFmpeg are fetched at build time — they do not need to be on your PATH.
+Node.js 18+. yt-dlp and FFmpeg are fetched at build time — they do not need to be on your PATH. The fetch script checks the yt-dlp binary against the `SHA2-256SUMS` file from that same release and stops if the checksum is missing or does not match.
 
 ## Dev
 

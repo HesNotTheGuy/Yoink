@@ -19,6 +19,102 @@ param(
 $ErrorActionPreference = 'Stop'
 $ScriptDir = $PSScriptRoot
 
+function Install-VerifiedYtDlp {
+    param(
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    $assetName = 'yt-dlp.exe'
+    $latest = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/$assetName"
+    $request = [System.Net.HttpWebRequest]::Create($latest)
+    $request.AllowAutoRedirect = $false
+    $request.Method = 'GET'
+    $request.UserAgent = 'yoink'
+    $request.Timeout = 60000
+    try {
+        $response = $request.GetResponse()
+    } catch {
+        throw "Could not resolve the yt-dlp release ($($_.Exception.Message)). Refusing to install an unverified binary."
+    }
+    try {
+        $status = [int]$response.StatusCode
+        $location = $response.Headers['Location']
+    } finally {
+        $response.Close()
+    }
+    if ($location -is [array]) { $location = $location[0] }
+    if ($status -lt 300 -or $status -ge 400 -or [string]::IsNullOrWhiteSpace([string]$location)) {
+        throw "Could not resolve the yt-dlp release (HTTP $status). Refusing to install an unverified binary."
+    }
+    $redirectUri = $null
+    if (-not [Uri]::TryCreate([string]$location, [UriKind]::Absolute, [ref]$redirectUri)) {
+        throw "yt-dlp release redirect was not a URL. Refusing to install an unverified binary."
+    }
+    if ($redirectUri.AbsolutePath -notmatch '/yt-dlp/yt-dlp/releases/download/([^/]+)/([^/]+)$') {
+        throw "Could not read a yt-dlp release tag. Refusing to install an unverified binary."
+    }
+    $tag = [Uri]::UnescapeDataString($Matches[1])
+    $file = [Uri]::UnescapeDataString($Matches[2])
+    if ($tag -notmatch '^\d{4}\.\d{2}\.\d{2}(\.\d+)?$' -or $tag.Contains('..')) {
+        throw "Refusing yt-dlp release tag '$tag'. Refusing to install an unverified binary."
+    }
+    if ($file -ne $assetName) {
+        throw "yt-dlp redirect pointed at $file, not $assetName. Refusing to install an unverified binary."
+    }
+
+    $sumsUrl = "https://github.com/yt-dlp/yt-dlp/releases/download/$tag/SHA2-256SUMS"
+    $assetUrl = "https://github.com/yt-dlp/yt-dlp/releases/download/$tag/$assetName"
+    $work = Join-Path ([System.IO.Path]::GetTempPath()) ("yoink-ytdlp-" + [guid]::NewGuid().ToString('n'))
+    New-Item -ItemType Directory -Path $work -Force | Out-Null
+    $sumsFile = Join-Path $work 'SHA2-256SUMS'
+    $binFile = Join-Path $work $assetName
+    try {
+        Write-Host "  Fetching SHA2-256SUMS for yt-dlp $tag..."
+        try {
+            Invoke-WebRequest -Uri $sumsUrl -OutFile $sumsFile -UseBasicParsing -ErrorAction Stop
+        } catch {
+            throw "Could not fetch SHA2-256SUMS for yt-dlp ${tag} ($($_.Exception.Message)). Refusing to install an unverified binary."
+        }
+        $expected = $null
+        foreach ($line in Get-Content -LiteralPath $sumsFile) {
+            $trim = $line.Trim()
+            if (-not $trim -or $trim.StartsWith('#')) { continue }
+            if ($trim -notmatch '^([a-fA-F0-9]{64})\s+\*?(\S+)$') {
+                throw "SHA2-256SUMS has an unreadable line. Refusing to install an unverified binary."
+            }
+            if ($Matches[2] -eq $assetName) {
+                $hash = $Matches[1].ToLower()
+                if ($expected -and $expected -ne $hash) {
+                    throw "SHA2-256SUMS lists conflicting hashes for $assetName. Refusing to install an unverified binary."
+                }
+                $expected = $hash
+            }
+        }
+        if (-not $expected) {
+            throw "SHA2-256SUMS has no entry for $assetName. Refusing to install an unverified binary."
+        }
+        Write-Host "  Downloading yt-dlp $tag..."
+        try {
+            Invoke-WebRequest -Uri $assetUrl -OutFile $binFile -UseBasicParsing -ErrorAction Stop
+        } catch {
+            throw "yt-dlp download failed ($($_.Exception.Message)). Refusing to install an unverified binary."
+        }
+        $actual = (Get-FileHash -LiteralPath $binFile -Algorithm SHA256).Hash.ToLower()
+        if ($actual -ne $expected) {
+            throw "Checksum mismatch for $assetName. Refusing to install an unverified binary."
+        }
+        $destDir = Split-Path -Parent $Destination
+        if (-not (Test-Path -LiteralPath $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
+        Move-Item -LiteralPath $binFile -Destination $Destination -Force
+        Write-Host "  Installed yt-dlp $tag (checksum ok)"
+    } finally {
+        if (Test-Path -LiteralPath $work) {
+            Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "  Yoink for Premiere - Installer"          -ForegroundColor Cyan
@@ -96,15 +192,7 @@ if (Test-Path $ytdlpDst) {
         Write-Host "  yt-dlp already on PATH ($($onPath.Source)) - leaving as-is." -ForegroundColor Green
     } else {
         Write-Host "  Downloading yt-dlp.exe from GitHub..." -ForegroundColor DarkYellow
-        $ytdlpUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
-        try {
-            Invoke-WebRequest -Uri $ytdlpUrl -OutFile $ytdlpDst -UseBasicParsing -ErrorAction Stop
-            $sizeMB = [math]::Round((Get-Item $ytdlpDst).Length / 1MB, 1)
-            Write-Host "  Downloaded yt-dlp.exe ($sizeMB MB) to $yoinkDataDir" -ForegroundColor Green
-        } catch {
-            Write-Host "  Failed to download yt-dlp: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host "  Place yt-dlp.exe manually at: $ytdlpDst" -ForegroundColor Yellow
-        }
+        Install-VerifiedYtDlp -Destination $ytdlpDst
     }
 }
 

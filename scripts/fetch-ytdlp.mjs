@@ -1,7 +1,11 @@
 /**
- * Downloads the latest yt-dlp.exe AND a Windows ffmpeg.exe and writes them
- * into the electron-builder resources/ folder so they get bundled into the
- * installer.
+ * Downloads the latest yt-dlp binary AND a Windows ffmpeg build and writes
+ * them into the electron-builder resources/ folder so they get bundled into
+ * the installer.
+ *
+ * The yt-dlp file is checked against the SHA2-256SUMS published with that
+ * same release. A missing checksum or a mismatch deletes the download and
+ * fails the build. The script does not keep an unverified binary.
  *
  * Runs as part of `npm run build:electron` so every installer ships with a
  * current yt-dlp + ffmpeg. The downloaded binaries are gitignored - the build
@@ -17,6 +21,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { assetNameForPlatform, downloadVerifiedYtdlp } from "../lib/ytdlp-integrity.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(__dirname, "..", "electron", "resources");
@@ -38,19 +43,43 @@ async function download(url, dest) {
 //  1. yt-dlp
 // ---------------------------------------------------------------------------
 
-const ytdlpFile = path.join(outDir, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
-const ytdlpUrl = process.platform === "win32"
-  ? "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
-  : "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
+const ytdlpName = assetNameForPlatform();
+const ytdlpFile = path.join(outDir, ytdlpName);
 
-console.log(`[fetch-ytdlp] downloading ${ytdlpUrl}`);
 try {
-  await download(ytdlpUrl, ytdlpFile);
+  const release = await downloadVerifiedYtdlp({
+    dest: ytdlpFile,
+    assetName: ytdlpName,
+    onStatus: (message) => console.log(`[fetch-ytdlp] ${message}`),
+  });
+  console.log(
+    `[fetch-ytdlp] wrote ${ytdlpFile} (${sizeMB(ytdlpFile)} MB, yt-dlp ${release.tag}, checksum ok)`
+  );
 } catch (err) {
-  console.error(`[fetch-ytdlp] yt-dlp download failed: ${err.message}`);
+  console.error(`[fetch-ytdlp] ${err.message}`);
   process.exit(1);
 }
-console.log(`[fetch-ytdlp] wrote ${ytdlpFile} (${sizeMB(ytdlpFile)} MB)`);
+
+// The Windows installer always bundles yt-dlp.exe. A non-Windows host that is
+// building that installer still has to fetch the exe; dev launches only need
+// the host binary above.
+const buildInstaller = process.platform === "win32" || process.env.YOINK_INSTALLER_RESOURCES === "1";
+if (buildInstaller && ytdlpName !== "yt-dlp.exe") {
+  const exeFile = path.join(outDir, "yt-dlp.exe");
+  try {
+    const release = await downloadVerifiedYtdlp({
+      dest: exeFile,
+      assetName: "yt-dlp.exe",
+      onStatus: (message) => console.log(`[fetch-ytdlp] ${message}`),
+    });
+    console.log(
+      `[fetch-ytdlp] wrote ${exeFile} (${sizeMB(exeFile)} MB, yt-dlp ${release.tag}, checksum ok)`
+    );
+  } catch (err) {
+    console.error(`[fetch-ytdlp] ${err.message}`);
+    process.exit(1);
+  }
+}
 
 // ---------------------------------------------------------------------------
 //  2. ffmpeg — "shared" build from yt-dlp/FFmpeg-Builds (Windows)
@@ -63,9 +92,10 @@ console.log(`[fetch-ytdlp] wrote ${ytdlpFile} (${sizeMB(ytdlpFile)} MB)`);
 //  electron-builder bundles the folder and main.ts seeds it to
 //  %APPDATA%\Yoink\ffmpeg\ on first launch.
 //
-//  Node has no built-in unzip, so on Windows we shell out to PowerShell's
-//  Expand-Archive (this is a Windows build script). A flaky mirror produces a
-//  clear error and non-zero exit without corrupting the yt-dlp we fetched.
+//  Node has no built-in unzip. Windows builds use PowerShell's Expand-Archive.
+//  Other hosts that are producing the Windows installer use Python's zipfile.
+//  A flaky mirror produces a clear error and non-zero exit without
+//  corrupting the yt-dlp we fetched.
 
 const ffmpegDir = path.join(outDir, "ffmpeg");
 // LGPL shared build from BtbN (yt-dlp's fork only ships GPL). Drops the
@@ -77,7 +107,7 @@ const ffmpegDir = path.join(outDir, "ffmpeg");
 const ffmpegZipUrl =
   "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl-shared.zip";
 
-if (process.platform !== "win32") {
+if (!buildInstaller) {
   console.warn("[fetch-ytdlp] skipping ffmpeg fetch (non-Windows build host)");
 } else {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yoink-ffmpeg-"));
@@ -87,16 +117,7 @@ if (process.platform !== "win32") {
     await download(ffmpegZipUrl, zipPath);
     console.log(`[fetch-ytdlp] extracting ffmpeg shared build (zip ${sizeMB(zipPath)} MB)`);
 
-    execFileSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${tmpDir}' -Force`,
-      ],
-      { stdio: ["ignore", "inherit", "inherit"] }
-    );
+    extractZip(zipPath, tmpDir);
 
     // The zip's top-level dir is versioned (e.g. ffmpeg-master-...-shared/);
     // locate the bin/ folder that contains ffmpeg.exe + ffprobe.exe + DLLs.
@@ -143,21 +164,53 @@ if (process.platform !== "win32") {
     // downloads + the audio clipper depend on libmp3lame). Fail the build
     // loudly if a future/leaner ffmpeg variant drops it, rather than shipping
     // an installer where "Audio (MP3)" silently fails for every user.
-    const encoders = execFileSync(path.join(ffmpegDir, "ffmpeg.exe"), ["-hide_banner", "-encoders"], {
-      encoding: "utf8",
-    });
-    if (!/\blibmp3lame\b/.test(encoders)) {
-      throw new Error("bundled ffmpeg lacks libmp3lame — mp3 extraction would fail; aborting");
+    // ffmpeg.exe is a Windows binary, so only a Windows host can run it.
+    let lameNote = "libmp3lame check skipped (host cannot run ffmpeg.exe)";
+    if (process.platform === "win32") {
+      const encoders = execFileSync(path.join(ffmpegDir, "ffmpeg.exe"), ["-hide_banner", "-encoders"], {
+        encoding: "utf8",
+      });
+      if (!/\blibmp3lame\b/.test(encoders)) {
+        throw new Error("bundled ffmpeg lacks libmp3lame — mp3 extraction would fail; aborting");
+      }
+      lameNote = "libmp3lame OK";
     }
 
     const total = dirSizeMB(ffmpegDir);
-    console.log(`[fetch-ytdlp] wrote ${ffmpegDir}\\ (ffmpeg.exe + ffprobe.exe + DLLs, ${total} MB; libmp3lame OK)`);
+    console.log(`[fetch-ytdlp] wrote ${ffmpegDir}\\ (ffmpeg.exe + ffprobe.exe + DLLs, ${total} MB; ${lameNote})`);
   } catch (err) {
     console.error(`[fetch-ytdlp] ffmpeg fetch failed: ${err.message}`);
     process.exit(1);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+}
+
+/** Unpacks `zipPath` into `dest`. Windows uses Expand-Archive; other hosts use Python. */
+function extractZip(zipPath, dest) {
+  if (process.platform === "win32") {
+    execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${dest}' -Force`,
+      ],
+      { stdio: ["ignore", "inherit", "inherit"] }
+    );
+    return;
+  }
+  execFileSync(
+    "python3",
+    [
+      "-c",
+      "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])",
+      zipPath,
+      dest,
+    ],
+    { stdio: ["ignore", "inherit", "inherit"] }
+  );
 }
 
 /** Recursively searches `dir` for a file named `name`, returns its path or null. */
